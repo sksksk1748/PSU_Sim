@@ -1,0 +1,48 @@
+name: Deploy to GitHub Pages
+
+# index.html is written as page content (no doctype/head), so wrap it in a
+# full HTML document before publishing; otherwise browsers fall into quirks mode.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build site
+        run: |
+          mkdir -p _site
+          {
+            printf '<!doctype html>\n<html lang="zh-Hant">\n<head>\n'
+            printf '<meta charset="utf-8">\n'
+            printf '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
+            printf '</head>\n<body>\n'
+            cat index.html
+            printf '\n</body>\n</html>\n'
+          } > _site/index.html
+          cp README.md _site/
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

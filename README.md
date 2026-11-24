@@ -2,6 +2,8 @@
 
 用瀏覽器就能玩的 3D 教學模型，用來認識伺服器電源 (PSU) 與電池備援單元 (BBU) 的內部構造、能量流動與韌體更新。整個專案只有一個 `index.html`。
 
+**線上版：<https://sksksk1748.github.io/PSU_Sim/>**（每次推送到 `main` 會由 GitHub Actions 自動重新部署）
+
 ## 機種
 
 | 機種 | 重點 |
