@@ -2538,7 +2538,7 @@ function renderPanel() {
   } else if (mode === 'quiz') {
     h += renderQuiz();
   } else if (mode === 'test') {
-    h += testPanelHTML();
+    h += tst.view === 'fixall' ? fixOverviewHTML() : testPanelHTML();
   }
   const keepScroll = mode === 'test' ? panelBody.scrollTop : 0;
   panelBody.innerHTML = h;
@@ -2621,8 +2621,10 @@ panelBody.addEventListener('click', e => {
   if (mode === 'test') {
     const tb = e.target.closest('[data-test]'); if (tb) { teSelect(tb.dataset.test); return; }
     const cb = e.target.closest('[data-cat]'); if (cb) { tst.cat = cb.dataset.cat; tst.part = null; renderPanel(); panelBody.scrollTop = 0; return; }
+    const fb = e.target.closest('[data-fix]'); if (fb) { teClickPart('fx:' + fb.dataset.fix); focusBox(new THREE.Box3().setFromObject(fixComps[fb.dataset.fix].group), 9, 20); panelBody.scrollTop = 0; return; }
     const b = e.target.closest('button'); if (!b) return;
     switch (b.id) {
+      case 'tBack': tst.view = 'item'; tst.part = null; renderPanel(); renderTestInfo(); panelBody.scrollTop = 0; break;
       case 'tPartX': tst.part = null; if (tst.sel) tst.cat = TE.byId[tst.sel].cat; renderPanel(); break;
       case 'tRunCat': teRunCat(); renderPanel(); break;
       case 'tReport': tst.view = 'report'; renderTestInfo(); break;
@@ -2788,9 +2790,9 @@ const TE_CATS = {
          tip: '同時量匯流排電壓、每台 PSU 的電流和 BBU 電流，觸發點設在 AC 斷電那一刻。' },
 };
 const TE_PROBES = {
-  acA:    ['Feed A：AC 電源 + 功率分析儀', -14.2, 3.6, -0.9],
-  acB:    ['Feed B：第二台 AC 電源', -14.2, 3.6, -2.6],
-  iin:    ['電流探棒夾 L 線', -13.15, 3.5, -0.3],
+  acA:    ['Feed A：AC 電源 A 輸出', -18.1, 0.75, -1.8],
+  acB:    ['Feed B：AC 電源 B 輸出', -18.1, 2.3, -1.8],
+  iin:    ['電流探棒（分接盒 L 線）', -17.0, 1.25, 0.4],
   relay:  ['K1 / K2 繼電器', -12.4, Y0 + 2.3, -1.75],
   bulk:   ['Vbulk 高壓差動探棒', -1.6, Y0 + 3.9, -0.6],
   vout:   ['Vout：Kelvin 端子（治具板）', 19.3, 1.95, 3.0],
@@ -2907,8 +2909,86 @@ const FIX_DEFS = [
     desc: '把電腦的 USB 轉成 PMBus（I²C）和 CAN，上位機軟體用它讀寫指令、記錄讀值、更新韌體。治具板上有 SDA / SCL 的上拉電阻和 CAN 終端電阻。',
     specs: [['介面', 'PMBus 100 / 400 kHz；CAN 500 kbit/s'], ['上拉', 'SDA / SCL 各 2.2 kΩ 到 3.3 V'], ['CAN 終端', '120 Ω']],
     tip: 'PMBus 讀不到時先查三件事：位址、上拉電阻、接地。轉接器和 PSU 沒有共地是最常見的原因。' },
+  // AC-side instruments in front of the PSU (kind 'inst')
+  { id: 'fx_acA', kind: 'inst', name: 'AC 電源 A（Feed A）', en: 'Programmable AC Source A · Feed A', tests: ['IN-01', 'IN-02', 'IN-03', 'IN-04', 'IN-05', 'IN-06', 'IN-07', 'IN-08', 'IN-09', 'ATS-01', 'ATS-04', 'ATS-05', 'ATS-06', 'ATS-07', 'ATS-11', 'EFF-01', 'OUT-09', 'EMC-10', 'SYS-01'],
+    desc: '可程控 AC 電源，代替配電的 Feed A。可以設定電壓、頻率、上電 / 斷電的相位角，也能跑程序：緩升緩降、短暫中斷、驟降。ATS 測試靠它在指定相位把 A 路斷掉。',
+    specs: [['輸出', '0–310 Vac，45–65 Hz'], ['容量', '≥ 6 kVA（4.4 kW PSU 加餘裕）'], ['程序', '相位角控制、ramp、dropout、dip']],
+    tip: '湧浪電流和 ATS 切換都要「指定相位」：湧浪在 90° / 270°（電壓峰值）上電最大；斷電角度不同，Bulk 剩下的能量也不同。一般市電插座做不到，所以要用可程控 AC 電源。' },
+  { id: 'fx_acB', kind: 'inst', name: 'AC 電源 B（Feed B）', en: 'Programmable AC Source B · Feed B', tests: ['ATS-01', 'ATS-02', 'ATS-03', 'ATS-08', 'ATS-09', 'ATS-10', 'EFF-03', 'OUT-09', 'SYS-02', 'SYS-03', 'SAF-05'],
+    desc: '第二台 AC 電源代替 Feed B。兩台的相位可以設成同相、差 120° 或 180°，模擬兩路來自不同相的配電，測 ATS 在最壞相位差下的切換。',
+    specs: [['輸出', '0–310 Vac，45–65 Hz'], ['同步', '和 A 同步，相位差可設定'], ['用途', 'ATS、兩路效率比較、兩路接觸電流']],
+    tip: '兩路如果接到三相配電的不同相，ATS 繼電器兩側的線間電壓可能到 480 V。切換時序沒做好，繼電器接點就會拉弧。' },
+  { id: 'fx_pa', kind: 'inst', name: '功率分析儀', en: 'Power Analyzer · U / I / P / PF / THD', tests: ['IN-03', 'IN-06', 'IN-07', 'IN-10', 'EFF-01', 'EFF-02', 'EFF-03', 'EFF-04', 'COM-02'],
+    desc: '量輸入端的電壓、電流、功率、功率因數和諧波，同時用另一組通道量輸出端（接治具板的參考分流器），算出效率。PMBus 讀值精度也是拿它當標準。',
+    specs: [['精度', '功率 ± 0.05% 等級'], ['通道', '輸入 1–2 組、輸出 1 組'], ['量測', 'U、I、P、PF、iTHD、各次諧波']],
+    tip: '量效率時，輸入和輸出要同時取樣、同一個積分時間；分開量再相除，負載稍微飄動就會讓效率差 0.1–0.2%。' },
+  { id: 'fx_acbox', kind: 'inst', name: 'AC 量測分接盒', en: 'AC Breakout Box & Line Cords', tests: ['IN-03', 'IN-04', 'IN-05', 'IN-06', 'IN-07', 'THM-07'],
+    desc: '電源線從 AC 電源經過分接盒再接到 PSU。盒子裡把 L 線拉出一段，方便夾電流探棒量湧浪；功率分析儀的電壓、電流量測線也從這裡接。',
+    specs: [['額定', '≥ 32 A，300 Vac'], ['量測口', 'L 線電流迴圈、U 量測端子'], ['電源線', '每路 3 × 4 mm²']],
+    tip: '量湧浪電流要用夠頻寬、夠大電流的探棒（例如 150 A 峰值），而且每次量之前要先消磁、歸零，不然直流偏移會讓峰值讀錯。' },
 ];
 const FIX = Object.fromEntries(FIX_DEFS.map(d => [d.id, d]));
+// what the AC sources are set to for each test item: [voltage, frequency, state on|off|seq, note]
+const AC_STD = ['230.0 V', '50.00 Hz', 'on', '100% 負載'], AC_STBY = ['230.0 V', '50.00 Hz', 'on', '待命'], AC_OFF = ['—', '', 'off', '輸出關閉'];
+const TE_AC = {
+  'IN-01': [['200–277 V', '50.00 Hz', 'seq', '電壓掃描 3 點'], AC_STBY], 'IN-02': [['230.0 V', '47–63 Hz', 'seq', '頻率掃描 4 點'], AC_STBY],
+  'IN-03': [['200.0 V', '50.00 Hz', 'on', '最低輸入、滿載'], AC_STBY], 'IN-04': [['277.0 V', '50.00 Hz', 'seq', '在 90° 上電'], AC_OFF], 'IN-05': [['277.0 V', '50.00 Hz', 'seq', '斷電 1 s 再上電'], AC_OFF],
+  'IN-06': [['230.0 V', '50.00 Hz', 'on', '20% 負載'], AC_STBY], 'IN-07': [['230.0 V', '50.00 Hz', 'on', '20% 負載'], AC_STBY],
+  'IN-08': [['230→150 V', '50.00 Hz', 'seq', '1 V/s 降壓再升回'], ['230→150 V', '50.00 Hz', 'seq', '和 A 同步']], 'IN-09': [['300.0 V', '50.00 Hz', 'on', '超過規格上限'], AC_OFF], 'IN-10': [['230.0 V', '50.00 Hz', 'on', '主輸出關閉'], AC_STBY],
+  'ATS-01': [['230.0 V', '50.00 Hz', 'seq', '在 90° 斷電'], AC_STBY], 'ATS-02': [['230.0 V', '50.00 Hz', 'seq', '斷電後恢復'], AC_STBY], 'ATS-03': [['230.0 V', '50.00 Hz', 'seq', '斷電'], ['230.0 V', '50.00 Hz', 'on', '相位差 180°']],
+  'ATS-04': [['230→150 V', '50.00 Hz', 'seq', '1 V/s 緩降'], AC_STBY], 'ATS-05': [['277→320 V', '50.00 Hz', 'seq', '緩升到過壓'], AC_STBY], 'ATS-06': [['230.0 V', '45 / 65 Hz', 'seq', '頻率異常'], AC_STBY],
+  'ATS-07': [['230.0 V', '50.00 Hz', 'seq', '中斷 2 ms'], AC_STBY], 'ATS-08': [['230.0 V', '50.00 Hz', 'seq', '兩路同時斷電'], ['230.0 V', '50.00 Hz', 'seq', '兩路同時斷電']], 'ATS-09': [['230.0 V', '50.00 Hz', 'seq', 'B 斷後再斷 A'], ['—', '', 'off', '先斷電']],
+  'ATS-10': [['230.0 V', '50.00 Hz', 'seq', '90° 斷電 × 3 種負載'], AC_STBY], 'ATS-11': [['230.0 V', '50.00 Hz', 'seq', '自動切換 10,000 次'], AC_STBY], 'ATS-12': [['230.0 V', '50.00 Hz', 'seq', '切換後讀狀態'], AC_STBY],
+  'EFF-01': [['230.0 V', '50.00 Hz', 'on', '10–100% 負載'], AC_OFF], 'EFF-02': [['230.0 V', '50.00 Hz', 'on', '10–100% 負載'], AC_OFF], 'EFF-03': [['230.0 V', '50.00 Hz', 'seq', 'A、B 輪流供電'], ['230.0 V', '50.00 Hz', 'seq', 'A、B 輪流供電']],
+  'OUT-09': [['200.0 V', '50.00 Hz', 'seq', '0° 同時移除'], ['200.0 V', '50.00 Hz', 'seq', '0° 同時移除']], 'OUT-10': [['200.0 V', '50.00 Hz', 'seq', '0° 同時移除'], ['200.0 V', '50.00 Hz', 'seq', '0° 同時移除']],
+  'SAF-05': [['305.0 V', '60.00 Hz', 'on', '額定上限 × 1.1'], ['305.0 V', '60.00 Hz', 'on', '兩路同時接上']],
+  'EMC-10': [['230.0 V', '50.00 Hz', 'seq', '驟降 / 中斷程序'], ['230.0 V', '50.00 Hz', 'seq', '驟降 / 中斷程序']],
+  'SYS-01': [['230.0 V', '50.00 Hz', 'seq', '斷電'], AC_STBY], 'SYS-02': [['230.0 V', '50.00 Hz', 'seq', '兩路同時斷電'], ['230.0 V', '50.00 Hz', 'seq', '兩路同時斷電']], 'SYS-03': [['230.0 V', '50.00 Hz', 'seq', '恢復供電'], ['230.0 V', '50.00 Hz', 'seq', '恢復供電']],
+};
+function teAcFor(id) {
+  if (TE_AC[id]) return TE_AC[id];
+  const cat = id.split('-')[0];
+  if (cat === 'SAF' && !['SAF-06', 'SAF-07'].includes(id)) return [['—', '', 'off', '改接安規測試器'], ['—', '', 'off', '改接安規測試器']];
+  if (cat === 'THM') return [['200.0 V', '50.00 Hz', 'on', '最差情況：低壓滿載'], AC_STBY];
+  if (cat === 'EMC') return [['230.0 V', '50.00 Hz', 'on', 'EMC 實驗室 · 經 LISN'], AC_STBY];
+  return [AC_STD, AC_STBY];
+}
+// power-analyzer readout for the selected item (input side)
+function tePaFor(id, ac) {
+  const src = ac[0][2] !== 'off' ? ac[0] : ac[1];
+  if (src[2] === 'off') return null;
+  const V = parseFloat(src[0]), r = teS().res[id];
+  const P = { 'IN-06': 925, 'IN-07': 925, 'IN-10': 9.4, 'EFF-01': 2270, 'EFF-02': 2270, 'EFF-03': 2270, 'EFF-04': 2270 }[id] ?? (id.startsWith('SAF') ? 18 : 4610);
+  const pf = id === 'IN-06' || id === 'IN-07' ? (r && r.s.includes('PF') ? parseFloat(r.s.slice(3)) : 0.975) : P < 50 ? 0.42 : 0.998;
+  return { V, P, pf, I: P / (V * pf) };
+}
+let teAcTex = {};
+// stacked instruments: put their name tags beside the stack instead of on top of the next box
+const FIX_LABEL_AT = { fx_acA: [-21.9, 0.75, -2.1], fx_acB: [-21.9, 2.3, -2.1], fx_pa: [-21.9, 3.75, -2.1] };
+function drawAcDisplay(g, W, H, label, st) {
+  const [v, f, s, note] = st, col = s === 'off' ? '#ff5d6c' : s === 'seq' ? '#ffc46b' : '#5dff9a';
+  g.fillStyle = '#05101a'; g.fillRect(0, 0, W, H);
+  g.fillStyle = '#7f93a8'; g.font = '600 24px "JetBrains Mono", monospace'; g.fillText(label, 18, 34);
+  g.fillStyle = col; g.fillRect(W - 150, 12, 132, 30); g.fillStyle = '#05101a'; g.font = '700 20px "JetBrains Mono", monospace';
+  g.fillText(s === 'off' ? 'OUTPUT OFF' : s === 'seq' ? 'PROGRAM' : 'OUTPUT ON', W - 142, 34);
+  g.fillStyle = col; g.font = `700 ${v.length > 9 ? 50 : 62}px "JetBrains Mono", monospace`; g.fillText(v, 18, 112);
+  g.fillStyle = '#c6d1dc'; g.font = '600 30px "JetBrains Mono", monospace'; g.fillText(f, 18, 156);
+  g.fillStyle = '#ffd28a'; g.font = '500 26px "Noto Sans TC", sans-serif'; g.fillText(note, 18, 214);
+}
+function drawPaDisplay(g, W, H, pa) {
+  g.fillStyle = '#060c14'; g.fillRect(0, 0, W, H);
+  g.fillStyle = '#7f93a8'; g.font = '600 22px "JetBrains Mono", monospace'; g.fillText('POWER ANALYZER · CH1 INPUT', 18, 32);
+  const rows = pa ? [['U', `${fx(pa.V, 1)} V`], ['I', `${fx(pa.I, pa.I < 1 ? 3 : 2)} A`], ['P', pa.P >= 1000 ? `${fx(pa.P / 1000, 3)} kW` : `${fx(pa.P, 1)} W`], ['λ', fx(pa.pf, 3)]] : [['U', '---'], ['I', '---'], ['P', '---'], ['λ', '---']];
+  rows.forEach(([k, v], i) => { const x = 18 + (i % 2) * (W / 2), y = 86 + Math.floor(i / 2) * 62; g.fillStyle = '#5ad1ff'; g.font = '700 26px "JetBrains Mono", monospace'; g.fillText(k, x, y); g.fillStyle = '#e6edf3'; g.font = '700 38px "JetBrains Mono", monospace'; g.fillText(v, x + 34, y); });
+}
+function teUpdateAc() {
+  if (!teAcTex.A || !TE) return;
+  const id = tst.sel || 'IN-01', ac = teAcFor(id);
+  const paint = (t, fn) => { const g = t.cv.getContext('2d'); fn(g, t.cv.width, t.cv.height); t.tex.needsUpdate = true; };
+  paint(teAcTex.A, (g, W, H) => drawAcDisplay(g, W, H, 'AC SOURCE A · FEED A', ac[0]));
+  paint(teAcTex.B, (g, W, H) => drawAcDisplay(g, W, H, 'AC SOURCE B · FEED B', ac[1]));
+  paint(teAcTex.pa, (g, W, H) => drawPaDisplay(g, W, H, tePaFor(id, ac)));
+}
 const partName = id => id.startsWith('fx:') ? FIX[id.slice(3)].name : DEF[id].name;
 const teFixOf = testId => FIX_DEFS.filter(d => d.tests.includes(testId)).map(d => d.id);
 let fixComps = {}, fixPick = [];
@@ -2953,15 +3033,17 @@ function buildFixture() {
   for (const x of [21.5, 22.2]) B(0.6, 0.45, 0.42, C.blue, x, 1.28, 0.15, { r: 0.4 });
   part('fx_load');
   for (const zc of [-1.1, 1.3]) { Cy(0.16, 0.95, C.gold, 24.3, 1.7, zc, GOLD); Cy(0.27, 0.16, C.steel, 24.3, 1.38, zc, METAL, 0, 0, 6); Cy(0.27, 0.16, C.steel, 24.3, 1.95, zc, METAL, 0, 0, 6); }
-  tube([[24.3, 2.05, -1.1], [25.3, 2.25, -0.45], [26.4, 1.75, -0.08], [27.42, 1.4, -0.16]], 0.16, 0xb3262d);
-  tube([[24.3, 2.05, 1.3], [25.3, 2.25, 0.65], [26.4, 1.75, 0.3], [27.42, 1.4, 0.16]], 0.16, 0x1a1b1e);
+  // the electronic load sits on the bench behind the fixture board (−z), cables run along the board edge
+  tube([[24.3, 2.05, -1.1], [25.3, 2.3, -1.6], [26.1, 1.6, -3.2], [25.9, 1.2, -5.2], [25.6, 1.0, -5.95]], 0.16, 0xb3262d);
+  tube([[24.3, 2.05, 1.3], [25.5, 2.3, 1.0], [26.5, 1.7, -1.2], [26.4, 1.3, -4.6], [25.95, 1.0, -5.95]], 0.16, 0x1a1b1e);
   part('fx_eload');
-  B(2.6, 2.6, 4.4, 0x2b3038, 28.7, 1.3, 0, { r: 0.5, m: 0.3 });
+  B(4.4, 2.6, 2.6, 0x2b3038, 24.0, 1.3, -7.4, { r: 0.5, m: 0.3 });
   const disp = canvasTex(512, 192, (g, W, H) => { g.fillStyle = '#071510'; g.fillRect(0, 0, W, H); g.fillStyle = '#5dff9a'; g.font = '700 60px "JetBrains Mono", monospace'; g.fillText('52.00 V', 24, 78); g.fillText('85.00 A', 24, 160); g.fillStyle = '#9fb0c2'; g.font = '600 22px "JetBrains Mono", monospace'; g.fillText('CC', 420, 40); });
-  B(1.7, 0.66, 0.03, 0xffffff, 28.25, 1.95, 2.215, { map: disp, e: 0x2a6a44, ei: 0.35 });
-  for (let i = 0; i < 4; i++) Cy(0.11, 0.08, 0x9aa6b2, 29.35 + (i % 2) * 0.42, 1.75 + Math.floor(i / 2) * 0.42, 2.24, METAL, Math.PI / 2);
-  for (const z of [-0.16, 0.16]) Cy(0.11, 0.2, z < 0 ? C.red : C.black, 27.37, 1.4, z, {}, 0, Math.PI / 2);
-  for (let i = 0; i < 6; i++) B(0.03, 0.05, 2.8, 0x1b1f24, 29.99, 0.6 + i * 0.2, 0);
+  const ld = new THREE.Mesh(BOX(1.7, 0.66, 0.03), new THREE.MeshBasicMaterial({ map: disp, toneMapped: false }));
+  ld.position.set(23.1, 1.85, -6.085); G.add(ld);
+  for (let i = 0; i < 4; i++) Cy(0.11, 0.08, 0x9aa6b2, 24.4 + (i % 2) * 0.42, 1.65 + Math.floor(i / 2) * 0.42, -6.06, METAL, Math.PI / 2);
+  for (const [x, col] of [[25.6, C.red], [25.95, C.black]]) Cy(0.11, 0.2, col, x, 1.0, -6.05, {}, Math.PI / 2);
+  for (let i = 0; i < 6; i++) B(3.8, 0.03, 0.05, 0x1b1f24, 24.0, 2.61, -8.4 + i * 0.4);
   part('fx_kelvin');
   for (const [z, col] of [[2.7, C.red], [3.35, C.black]]) { Cy(0.17, 0.42, col, 19.3, 1.26, z, { r: 0.4 }); Cy(0.09, 0.14, C.gold, 19.3, 1.52, z, GOLD); }
   tube([[18.45, 1.42, -1.1], [18.85, 1.75, -0.3], [19.05, 1.55, 1.9], [19.3, 1.5, 2.7]], 0.035, 0xffd166);
@@ -2989,16 +3071,49 @@ function buildFixture() {
   for (let i = 0; i < 3; i++) B(0.12, 0.06, 0.14, 0xffffff, 23.35 + i * 0.25, 1.23, -2.9 + (i === 1 ? 0.06 : -0.04));
   part('fx_usb');
   B(1.0, 0.36, 0.6, 0x23395b, 22.4, 1.23, -3.2, { r: 0.45, m: 0.3 }); B(0.6, 0.25, 0.15, C.black, 22.4, 1.18, -2.75);
-  tube([[22.9, 1.23, -3.2], [24.3, 1.1, -4.3], [26.2, 0.35, -5.3]], 0.06, 0x30343a);
+  tube([[22.9, 1.23, -3.2], [22.4, 1.0, -4.6], [21.2, 0.3, -5.9]], 0.06, 0x30343a);
   B(0.9, 0.36, 0.3, C.steel, 24.6, 1.23, -3.85, METAL); B(0.6, 0.2, 0.05, C.black, 24.6, 1.23, -4.01);
+  // AC side: two programmable AC sources + power analyzer stacked in front of the PSU, cords through a breakout box
+  const dispTex = (w, h) => { const cv = document.createElement('canvas'); cv.width = w; cv.height = h; const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; return { cv, tex }; };
+  teAcTex = { A: dispTex(512, 240), B: dispTex(512, 240), pa: dispTex(512, 220) };
+  const SX = -19.6, SZ = -3.6, FZ = SZ + 1.5; // stack centre and its front face (faces +z)
+  const instrument = (id, y0, h, tex, ports) => {
+    part(id);
+    B(3.4, h, 3.0, 0xd5d9de, SX, y0 + h / 2, SZ, { r: 0.55, m: 0.15 });
+    B(3.42, 0.08, 3.02, 0x5b6470, SX, y0 + h - 0.04, SZ, { r: 0.5 });
+    const scr = new THREE.Mesh(BOX(1.75, h * 0.62, 0.03), new THREE.MeshBasicMaterial({ map: tex.tex, toneMapped: false })); // unlit screen
+    scr.position.set(SX - 0.7, y0 + h * 0.55, FZ + 0.016); G.add(scr);
+    Cy(0.16, 0.12, 0x2b3038, SX + 0.55, y0 + h * 0.55, FZ + 0.06, { r: 0.4 }, Math.PI / 2);
+    for (let i = 0; i < 3; i++) B(0.22, 0.12, 0.05, 0x3a4350, SX + 0.4 + i * 0.3, y0 + h * 0.22, FZ + 0.03);
+    ports();
+  };
+  instrument('fx_acA', 0, 1.5, teAcTex.A, () => { for (const [dx, c] of [[1.15, 0x7a4a24], [1.4, 0x2747a8], [1.27, 0x9bc23c]]) Cy(0.09, 0.14, c, SX + dx, 0.5, FZ + 0.07, {}, Math.PI / 2); });
+  instrument('fx_acB', 1.55, 1.5, teAcTex.B, () => { for (const [dx, c] of [[1.15, 0x7a4a24], [1.4, 0x2747a8], [1.27, 0x9bc23c]]) Cy(0.09, 0.14, c, SX + dx, 2.05, FZ + 0.07, {}, Math.PI / 2); });
+  instrument('fx_pa', 3.1, 1.25, teAcTex.pa, () => { for (let i = 0; i < 4; i++) Cy(0.07, 0.12, i % 2 ? C.black : C.red, SX + 1.0 + (i % 2) * 0.22, 3.45 + Math.floor(i / 2) * 0.32, FZ + 0.06, {}, Math.PI / 2); });
+  part('fx_acbox');
+  B(1.5, 0.6, 2.4, 0x2b3038, -17.0, 0.3, 0.9, { r: 0.5, m: 0.3 });
+  B(0.5, 0.02, 1.6, 0xe5c02b, -17.0, 0.61, 0.9);
+  for (const z of [0.4, 1.4]) Cy(0.16, 0.25, 0xd8aa45, -17.0, 0.72, z, GOLD); // L-wire loops for the current probe
+  for (const z of [-0.9, -2.6]) B(0.9, 1.25, 1.2, C.black, -15.68, 2.0, z, { r: 0.5 }); // IEC plugs in the PSU inlets
+  tube([[SX + 1.27, 0.5, FZ + 0.12], [-18.2, 0.35, -0.9], [-17.75, 0.32, 0.6]], 0.09, 0x1a1b1e);
+  tube([[SX + 1.27, 2.05, FZ + 0.12], [-18.4, 1.0, -0.8], [-17.75, 0.32, 1.3]], 0.09, 0x1a1b1e);
+  tube([[-16.6, 0.32, -0.3], [-16.4, 1.2, -0.6], [-16.13, 2.0, -0.9]], 0.09, 0x1a1b1e);
+  tube([[-17.2, 0.32, -0.3], [-16.8, 1.3, -1.8], [-16.13, 2.0, -2.6]], 0.09, 0x1a1b1e);
+  tube([[SX + 1.0, 3.45, FZ + 0.1], [-18.0, 1.8, -0.6], [-17.2, 0.62, 0.6]], 0.035, 0xb3262d);
+  tube([[SX + 1.22, 3.45, FZ + 0.1], [-17.8, 1.7, -0.5], [-16.8, 0.62, 0.6]], 0.035, 0x1a1b1e);
   // pickable meshes + labels
   for (const id in fixComps) {
     const fc = fixComps[id];
-    fc.group.traverse(o => { if (o.isMesh) { o.userData.comp = 'fx:' + id; o.userData.baseE = o.material.emissive.clone(); o.userData.baseI = o.material.emissiveIntensity; fc.meshes.push(o); fixPick.push(o); } });
-    const b = new THREE.Box3().setFromObject(fc.group);
-    fc.label = css2d('lbl', `<i style="background:#ffb547"></i>${FIX[id].name}`, new THREE.Vector3((b.min.x + b.max.x) / 2, b.max.y + 0.35, (b.min.z + b.max.z) / 2), teGroup);
+    fc.group.traverse(o => {
+      if (!o.isMesh) return;
+      o.userData.comp = 'fx:' + id; fixPick.push(o);
+      if (o.material.emissive) { o.userData.baseE = o.material.emissive.clone(); o.userData.baseI = o.material.emissiveIntensity; fc.meshes.push(o); } // unlit screens don't glow
+    });
+    const b = new THREE.Box3().setFromObject(fc.group), at = FIX_LABEL_AT[id];
+    fc.label = css2d('lbl', `<i style="background:${FIX[id].kind ? '#5ad1ff' : '#ffb547'}"></i>${FIX[id].name}`, at ? new THREE.Vector3(...at) : new THREE.Vector3((b.min.x + b.max.x) / 2, b.max.y + 0.35, (b.min.z + b.max.z) / 2), teGroup);
   }
   G = prevG;
+  teUpdateAc();
 }
 function updateFixHL() {
   if (mode !== 'test') { for (const id in fixComps) fixComps[id].label.visible = false; return; }
@@ -3457,7 +3572,7 @@ function teTick(now) {
     const list = teList(), fails = list.filter(it => S.res[it.id] && !S.res[it.id].pass).length;
     toast(fails ? `量完了：${fails} 項 FAIL。點 FAIL 的測項，再找出故障零件` : '量完了：這一組全部 PASS');
   }
-  if (r.id === tst.sel) { renderTestInfo(); updateScopeHead(); }
+  if (r.id === tst.sel) { renderTestInfo(); updateScopeHead(); teUpdateAc(); }
   renderPanel();
 }
 function teCheckDone(S) {
@@ -3471,9 +3586,14 @@ function teSelect(id, fly = true) {
   tst.sel = id; tst.view = 'item';
   if (!tst.part) tst.cat = it.cat;
   selIds = new Set(it.parts); currentId = null;
-  teShowProbes(it.pr);
+  teShowProbes(it.pr); teUpdateAc();
   renderTestInfo(); updateScopeHead(); renderPanel();
-  if (fly) focusBox(compBox(it.parts), 13, 30);
+  if (fly) {
+    // frame the PSU parts together with the instruments / fixture elements this item uses
+    const b = compBox(it.parts);
+    for (const f of teFixOf(id)) if (fixComps[f]) b.expandByObject(fixComps[f].group);
+    focusBox(b, 13, 46);
+  }
 }
 function teClickPart(id) {
   if (tst.diag) { teDiagnose(id); return; }
@@ -3486,7 +3606,8 @@ function teClickPart(id) {
 }
 function teFixOverview() {
   tst.view = 'fixall'; tst.part = null; renderTestInfo(); renderPanel();
-  focusPoint(new THREE.Vector3(22.2, 1.2, 0), 15);
+  panelBody.scrollTop = 0;
+  focusPoint(new THREE.Vector3(2.6, 1.2, -1.5), 62);
 }
 function teDiagnose(part) {
   const id = tst.diag, S = teS(); if (!id) return;
@@ -3552,7 +3673,7 @@ function testPanelHTML() {
       <div><dt>PASS</dt><dd class="good">${done.length - fails.length}</dd></div><div><dt>FAIL</dt><dd class="${fails.length ? 'badc' : ''}">${fails.length}</dd></div>
       <div><dt>找到的問題</dt><dd>${S.found.length} / ${blindHide ? '?' : S.d.length}</dd></div><div><dt>分數</dt><dd class="warn">${S.score}</dd></div>
     </dl>
-    <button class="btn ${tst.view === 'fixall' ? 'primary' : ''}" id="tFixAll">認識測試治具板（${FIX_DEFS.length} 個元件）</button>
+    <button class="btn ${tst.view === 'fixall' ? 'primary' : ''}" id="tFixAll">認識測試台架：AC 電源 + 治具板（${FIX_DEFS.length} 項）</button>
     <div class="chips">${chips}</div>
     ${head}
     <ul class="tlist">${list.map(it => `<li><button data-test="${it.id}" class="${tst.sel === it.id ? 'on' : ''}"><span class="tid">${it.id}</span><span><b>${it.en}</b><small>${it.zh}</small></span>${teBadge(S, it.id)}</button></li>`).join('')}</ul>
@@ -3607,8 +3728,11 @@ function testReportHTML() {
 }
 function fixInfoHTML(id) {
   const d = FIX[id];
-  return `<div class="ih"><span class="pill" style="background:#ffb547">測試治具板</span><button class="x" id="infoClose" aria-label="關閉">×</button></div>
+  const ac = d.kind && tst.sel ? teAcFor(tst.sel) : null;
+  const now = ac ? (id === 'fx_acA' ? [ac[0]] : id === 'fx_acB' ? [ac[1]] : null) : null;
+  return `<div class="ih"><span class="pill" style="background:${d.kind ? '#5ad1ff' : '#ffb547'}">${d.kind ? 'AC 側儀器' : '測試治具板'}</span><button class="x" id="infoClose" aria-label="關閉">×</button></div>
     <div><h2>${d.name}</h2><p class="en">${d.en}</p></div>
+    ${now ? `<p class="note">目前測項 <b>${tst.sel}</b> 的設定：${now[0][2] === 'off' ? '輸出關閉' : `${now[0][0]}，${now[0][1]}，${now[0][3]}`}</p>` : ''}
     <p class="desc">${d.desc}</p>
     <dl class="specs">${d.specs.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
     <div class="tipbox"><b>TE 小知識</b>${d.tip}</div>
@@ -3616,16 +3740,18 @@ function fixInfoHTML(id) {
     <div class="inav"><button id="tFixAll2">◀ 治具板總覽</button><span></span><span></span></div>`;
 }
 function fixOverviewHTML() {
-  return `<div class="ih"><span class="pill" style="background:#ffb547">測試治具板</span><button class="x" id="infoClose" aria-label="關閉">×</button></div>
-    <div><h2>PSU 測試治具板</h2><p class="en">Test Fixture / Load Board · 4.4 kW 52 V</p></div>
-    <p class="desc">治具板接在 PSU 尾端，代替機櫃的匯流排和背板：PSU 的銅夾夾住治具的插刀，訊號針腳插進訊號插座。治具把大電流導到電子負載，同時提供正確的量測點（Kelvin 電壓、漣波 BNC、參考分流器）和測試用的開關（PS_ON、短路、電容組、外部匯流排）。</p>
-    <div class="tipbox"><b>為什麼要治具</b>同一台 PSU，量測點接錯就會量出假的 FAIL。治具把每個量測點固定下來，不同 TE、不同天量到的結果才能比較。AC 側另外用兩台 AC 電源和功率分析儀，直接接 PSU 前面的 Feed A / B 插座。</div>
-    <div><p class="chain-t">治具元件（點名稱或在 3D 模型上點）</p><ul class="tlist">${FIX_DEFS.map(d => `<li><button data-fix="${d.id}"><span class="tid">${d.tests.length} 項</span><span><b>${d.name}</b><small>${d.en}</small></span></button></li>`).join('')}</ul></div>`;
+  // shown in the left panel so the whole bench stays visible on the right
+  return `<button class="btn" id="tBack">◀ 回到測項清單</button>
+    <div><h3>PSU 測試台架</h3><p class="lead">AC Sources · Power Analyzer · Test Fixture / Load Board</p></div>
+    <p class="lead">PSU 前面接兩台可程控 AC 電源（Feed A / B）和功率分析儀，電源線經過量測分接盒再插進 PSU。治具板接在 PSU 尾端，代替機櫃的匯流排和背板：PSU 的銅夾夾住治具的插刀，訊號針腳插進訊號插座。治具把大電流導到電子負載，同時提供正確的量測點（Kelvin 電壓、漣波 BNC、參考分流器）和測試用的開關（PS_ON、短路、電容組、外部匯流排）。</p>
+    <div class="tipbox"><b>為什麼要治具</b>同一台 PSU，量測點接錯就會量出假的 FAIL。治具把每個量測點固定下來，不同 TE、不同天量到的結果才能比較。</div>
+    ${[['AC 側儀器（PSU 前方）', FIX_DEFS.filter(d => d.kind)], ['輸出側治具板（PSU 後方）', FIX_DEFS.filter(d => !d.kind)]].map(([t, list]) => `<div><p class="chain-t">${t}</p><ul class="tlist">${list.map(d => `<li><button data-fix="${d.id}"><span class="tid">${d.tests.length} 項</span><span><b>${d.name}</b><small>${d.en}</small></span></button></li>`).join('')}</ul></div>`).join('')}
+    <p class="note">選任何測項時，AC 電源和功率分析儀的螢幕會顯示那個測項的設定（電壓、頻率、斷電相位、程序）。</p>`;
 }
 function renderTestInfo() {
   if (mode !== 'test') return;
+  if (tst.view === 'fixall') { info.hidden = true; return; }
   if (tst.view === 'report') info.innerHTML = testReportHTML();
-  else if (tst.view === 'fixall') info.innerHTML = fixOverviewHTML();
   else if (tst.view === 'fix' && tst.fix) info.innerHTML = fixInfoHTML(tst.fix);
   else if (tst.sel) info.innerHTML = testInfoHTML();
   else { info.hidden = true; return; }
@@ -3862,8 +3988,8 @@ function setMode(m) {
     teInit(); explodeT = 0; setPressed('#tExplode', false);
     tst.view = 'item';
     teSelect(tst.sel || (teList()[0] || TE.items[0]).id, false);
-    const T = new THREE.Vector3(5, 1.2, 0); // the fixture board sits behind the PSU's output end
-    flyTo(homePos().sub(HOME_T).multiplyScalar(1.12).add(T), T);
+    const T = new THREE.Vector3(1.5, 1.2, -0.5); // AC sources in front of the PSU, fixture board behind its output end
+    flyTo(homePos().sub(HOME_T).multiplyScalar(1.5).add(T), T);
   }
   else renderPanel();
   applyLabels(); updateScopeHead();
@@ -4019,7 +4145,8 @@ renderer.domElement.addEventListener('pointermove', e => {
   if (id && mode !== 'quiz') {
     const r = $('#app').getBoundingClientRect();
     const fxp = id.startsWith('fx:');
-    tip.innerHTML = `<i class="dot" style="background:${fxp ? '#ffb547' : ZONES[DEF[id].zone].color}"></i>${fxp ? '治具 · ' : ''}${partName(id)}`;
+    const inst = fxp && FIX[id.slice(3)].kind;
+    tip.innerHTML = `<i class="dot" style="background:${inst ? '#5ad1ff' : fxp ? '#ffb547' : ZONES[DEF[id].zone].color}"></i>${inst ? '儀器 · ' : fxp ? '治具 · ' : ''}${partName(id)}`;
     tip.style.left = (e.clientX - r.left + 14) + 'px'; tip.style.top = (e.clientY - r.top + 14) + 'px'; tip.hidden = false;
   } else tip.hidden = true;
 });
