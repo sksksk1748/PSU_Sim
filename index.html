@@ -291,8 +291,8 @@ body.has-scope #info{max-height:calc(100% - 92px - 250px)}
       <div class="pick">
         <button data-pick="crps12"><b>3 kW · 12 V</b><span>1U CRPS 外形，雙 AC 輸入、內建 ATS，金手指輸出 12 V。</span>
           <span class="flowline"><b style="background:#ffb547">AC×2</b>→<b style="background:#ffb547">ATS</b>→<b style="background:#ff8a3d">整流</b>→<b style="background:#ff6b3d">PFC</b>→<b style="background:#b48cff">LLC</b>→<b style="background:#2fd4b5">12 V</b></span></button>
-        <button data-pick="dc52"><b>4.4 kW · 52 V</b><span>資料中心 48 V 級機櫃用。無橋圖騰柱 PFC、雙相 LLC，輸出接 52 V 匯流排與電池備援。</span>
-          <span class="flowline"><b style="background:#ffb547">AC</b>→<b style="background:#ff6b3d">圖騰柱 PFC</b>→<b style="background:#b48cff">LLC×2</b>→<b style="background:#2fd4b5">52 V</b>→<b style="background:#5aa9ff">BBU</b></span></button>
+        <button data-pick="dc52"><b>4.4 kW · 52 V</b><span>資料中心 48 V 級機櫃用。雙 AC 輸入 + ATS、無橋圖騰柱 PFC、雙相 LLC，輸出接 52 V 匯流排與電池備援。</span>
+          <span class="flowline"><b style="background:#ffb547">AC×2</b>→<b style="background:#ffb547">ATS</b>→<b style="background:#ff6b3d">圖騰柱 PFC</b>→<b style="background:#b48cff">LLC×2</b>→<b style="background:#2fd4b5">52 V</b>→<b style="background:#5aa9ff">BBU</b></span></button>
         <button data-pick="bbu"><b>BBU 電池備援</b><span>掛在 52 V 匯流排上的鋰電池備援單元。AC 斷電時放電撐住機櫃，平時從匯流排充電。</span>
           <span class="flowline"><b style="background:#8bd17c">電芯 14S8P</b>→<b style="background:#8bd17c">BMS</b>→<b style="background:#b48cff">雙向 DC-DC</b>⇄<b style="background:#2fd4b5">52 V</b></span></button>
       </div>
@@ -1019,9 +1019,9 @@ const MODEL_B = {
   storeKey: 'psu-lab-visited-dc52',
   isoX: 4.4, acEnd: -6.9,
   zoneNames: ['AC 輸入區', '一次側 · 高壓', '二次側 · 52 V SELV'],
-  bulkNode: 6,
+  bulkNode: 7,
   stages: [
-    { name: 'AC 輸入',         v: '200–277 Vac · 單路',        comps: ['ac_inlet'], wave: 'ac' },
+    { name: 'AC 輸入 ×2 + ATS', v: 'Feed A / B · 200–277 Vac',  comps: ['ac_inlet', 'ats'], wave: 'ac' },
     { name: '保護與 EMI 濾波',  v: '兩級濾波 · 限湧浪',          comps: ['fuse', 'emi', 'inrush'], wave: 'emi' },
     { name: '圖騰柱 PFC',       v: '整流 + 升壓合一 → 400 V',    comps: ['pfc_l', 'pfc_sw', 'dsp_pri'], wave: 'pfc' },
     { name: 'Bulk 儲能',        v: '400 Vdc · 保持時間',         comps: ['bulk'], wave: 'bulk' },
@@ -1035,25 +1035,31 @@ const MODEL_B = {
   stageColors: ['#ffb547', '#ffb547', '#ff6b3d', '#ff4d4d', '#b48cff', '#b48cff', '#2fd4b5', '#2fd4b5', '#2fd4b5', '#2fd4b5'],
   stageKinds: ['ac', 'ac', 'ac', 'dc', 'hf', 'hf', 'dc', 'dc', 'dc', 'dc'],
   nodes: [
-    [-12.2, 2.0, -3.0, 1], [-10.6, 3.0, -1.4, 1], [-9.0, 3.0, -1.4, 1], [-7.8, 2.6, -0.5, 1],
+    [-12.4, 2.9, -1.75, 0], [-11.9, 2.0, 0.9, 1], [-10.6, 3.0, -1.4, 1], [-9.0, 3.0, -1.4, 1], [-7.8, 2.6, -0.5, 1],
     [-5.9, 3.6, -0.7, 2], [-4.2, 3.8, -0.4, 2], [-1.6, 4.0, -0.6, 3], [0.7, 3.8, -0.1, 4],
     [2.6, 3.0, -0.6, 4], [4.4, 3.6, -0.1, 5], [6.8, 3.0, -0.1, 6], [9.0, 2.3, -0.6, 7],
     [12.1, 1.3, 0.3, 7], [13.2, 1.0, -0.4, 8], [14.6, 1.2, -1.1, 9], [16.5, 1.5, -1.1, 9],
   ],
-  feeds: { A: [[-13.4, 2.2, -1.75], [-12.9, 2.6, -2.5], [-12.2, 2.0, -3.0]] },
-  feedLabels: [['A', -1.75]],
+  feeds: {
+    A: [[-13.4, 2.2, -0.9], [-12.95, 2.9, -0.9], [-12.4, 2.9, -1.75]],
+    B: [[-13.4, 2.2, -2.6], [-12.95, 2.9, -2.6], [-12.4, 2.9, -1.75]],
+  },
+  feedLabels: [['A', -0.9], ['B', -2.6]],
   atsView: { pos: [-14, 15, 24], target: [0, 1.6, 0] },
   fw: {
-    lead: '這台 52 V 電源沒有 ATS，可燒錄的 MCU 有 2 顆。上位機透過 CAN 接到二次側 DSP，二次側再經數位隔離器用 UART 轉送給一次側 DSP。',
-    pmLead: '機櫃管理控制器 (BMC) 是 PMBus 主控端，直接接到二次側 DSP（從端位址 0x58）；一次側 DSP 同樣要靠二次側經數位隔離器用 UART 轉送。',
-    order: ['pri', 'sec'],
-    orderWhy: '先更新經由轉送的 Primary，最後才更新負責轉送的 Secondary。',
-    chain: [{ n: 'host', t: '上位機' }, { l: 'CAN', a: 'host>pins' }, { n: 'sec', t: 'Secondary' }, { l: 'UART（隔離）', a: 'sec>iso' }, { n: 'pri', t: 'Primary' }],
-    view: { pos: [6, 21, 27], target: [3, 1, 0] },
-    nodes: { host: [19.4, 1.5, -2.6], pins: [16.3, 1.4, -2.6], xcvr: [12.4, Y0 + 0.12, -2.1], sec: [8.0, Y0 + 0.95, 3.13], iso: [4.4, Y0 + 0.14, 3.25], pri: [-2.0, Y0 + 1.1, 3.07] },
-    edges: [['host', 'pins', 'CAN'], ['pins', 'xcvr', 'CAN'], ['xcvr', 'sec', 'CAN'], ['sec', 'iso', 'UART'], ['iso', 'pri', 'UART']],
+    lead: '這台 52 V 電源有 3 顆可以燒錄的 MCU：ATS / Primary / Secondary。上位機透過 CAN 接到二次側 DSP；二次側當閘道，經數位隔離器用 UART 轉給一次側 DSP，一次側再轉給 ATS MCU。',
+    pmLead: '機櫃管理控制器 (BMC) 是 PMBus 主控端，直接接到二次側 DSP（從端位址 0x58）；一次側 DSP 和 ATS MCU 都要靠二次側經數位隔離器用 UART 轉送。',
+    order: ['ats', 'pri', 'sec'],
+    orderWhy: '先更新最遠的 ATS 和 Primary，最後才更新負責轉送的 Secondary，避免更新到一半失去轉送能力。',
+    chain: [{ n: 'host', t: '上位機' }, { l: 'CAN', a: 'host>pins' }, { n: 'sec', t: 'Secondary' }, { l: 'UART（隔離）', a: 'sec>iso' }, { n: 'pri', t: 'Primary' }, { l: 'UART', a: 'pri>ats' }, { n: 'ats', t: 'ATS' }],
+    view: { pos: [3, 23, 29], target: [1, 1, 0] },
+    nodes: { host: [19.4, 1.5, -2.6], pins: [16.3, 1.4, -2.6], xcvr: [12.4, Y0 + 0.12, -2.1], sec: [8.0, Y0 + 0.95, 3.13], iso: [4.4, Y0 + 0.14, 3.25], pri: [-2.0, Y0 + 1.1, 3.07], ats: [-11.45, Y0 + 0.22, -1.75] },
+    edges: [['host', 'pins', 'CAN'], ['pins', 'xcvr', 'CAN'], ['xcvr', 'sec', 'CAN'], ['sec', 'iso', 'UART'], ['iso', 'pri', 'UART'], ['pri', 'ats', 'UART']],
     nodeLabels: { xcvr: 'CAN 收發器', iso: '數位隔離器 · UART 跨隔離' },
     targets: [
+      { id: 'ats', name: 'ATS MCU', comp: 'ats', addr: 0x7E2, resp: 0x7EA, hops: ['host', 'pins', 'xcvr', 'sec', 'iso', 'pri', 'ats'], size: 24, ver: '1.1.4', next: '1.2.0',
+        family: '小型 32-bit MCU，例如 ST STM32G0、Microchip PIC32CM / SAM 等', core: 'Arm Cortex-M0+，約 48–64 MHz', flash: '32–64 KB',
+        role: '偵測 Feed A / B 的電壓、頻率與相位，控制繼電器切換時序，並把兩路 AC 狀態回報給 Primary。', link: 'CAN → Secondary → UART（隔離）→ Primary → UART' },
       { id: 'pri', name: 'Primary DSP', comp: 'dsp_pri', addr: 0x7E1, resp: 0x7E9, hops: ['host', 'pins', 'xcvr', 'sec', 'iso', 'pri'], size: 112, ver: '1.4.2', next: '1.5.0',
         family: DSC_FAMILY, core: DSC_CORE, flash: '128–256 KB',
         role: '圖騰柱 PFC 控制（慢臂換向、過零突波處理）、AC 量測與掉電偵測、Bulk 監測。', link: 'CAN → Secondary 轉送 → UART（經數位隔離器）' },
@@ -1063,10 +1069,11 @@ const MODEL_B = {
     ],
   },
   subs: {
-    ac_inlet: [['高電流 AC 輸入插座', -14.2, 3.1, -1.75], ['L 火線（棕）', -12.95, 3.0, -1.35], ['N 中性線（藍）', -12.95, 2.7, -2.15], ['PE 接地（黃綠）→ 機殼', -13.15, 0.95, -1.75]],
-    fuse: [['F1 保險絲（300 Vac 級）', -12.2, Y0 + 0.7, -3.0]],
-    emi: [['LF1 共模電感 · 第 1 級', -10.6, Y0 + 2.15, -1.4], ['LF2 共模電感 · 第 2 級', -9.0, Y0 + 2.15, -1.4], ['CX1 X 電容 (L–N)', -12.2, Y0 + 1.0, 1.0], ['CX2 X 電容 (L–N)', -9.8, Y0 + 1.0, 1.4], ['CY1 / CY2 Y 電容 (對地)', -9.8, Y0 + 1.05, -3.15]],
-    inrush: [['RT1 NTC 熱敏電阻', -7.8, Y0 + 1.3, 0.6], ['K1 旁路繼電器', -7.8, Y0 + 1.1, -1.6]],
+    ac_inlet: [['Feed A 插座', -14.2, 3.1, -0.9], ['Feed B 插座', -14.2, 3.1, -2.6], ['L 火線（棕）', -13.15, 3.15, -0.6], ['N 中性線（藍）', -13.15, 2.95, -2.9], ['PE 接地（黃綠）→ 機殼', -13.15, 0.95, -0.9]],
+    ats: [['K1 繼電器 · A 路', -12.4, Y0 + 1.7, -0.9], ['K2 繼電器 · B 路', -12.4, Y0 + 1.7, -2.6], ['ATS MCU（韌體 1）', -11.45, Y0 + 0.25, -1.75], ['狀態 LED', -11.75, Y0 + 0.45, -0.9]],
+    fuse: [['F1 保險絲（300 Vac 級）', -11.9, Y0 + 0.7, 0.9]],
+    emi: [['LF1 共模電感 · 第 1 級', -10.6, Y0 + 2.15, -1.4], ['LF2 共模電感 · 第 2 級', -9.0, Y0 + 2.15, -1.4], ['CX1 X 電容 (L–N)', -12.0, Y0 + 1.0, 2.6], ['CX2 X 電容 (L–N)', -9.8, Y0 + 1.0, 1.4], ['CY1 / CY2 Y 電容 (對地)', -9.8, Y0 + 1.05, -3.15]],
+    inrush: [['RT1 NTC 熱敏電阻', -7.8, Y0 + 1.3, 0.6], ['K3 旁路繼電器', -7.8, Y0 + 1.1, -1.6]],
     pfc_l: [['L1 PFC 電感 · 相 1（雙向電流）', -5.9, Y0 + 2.8, -2.25], ['L2 PFC 電感 · 相 2', -5.9, Y0 + 2.8, 0.85]],
     pfc_sw: [['Q1–Q4 GaN 快臂（綠點，高頻）', -4.235, Y0 + 2.2, -1.25], ['Q5 / Q6 Si 慢臂（白點，50/60 Hz）', -4.235, Y0 + 2.2, 2.2], ['鋁散熱片', -3.3, Y0 + 3.0, -3.4]],
     bulk: [['C1 450 V 電解電容', -1.6, Y0 + 3.3, -2.6], ['C2 450 V 電解電容', -1.6, Y0 + 3.3, -0.6], ['C3 450 V（共 1500 µF）', -1.6, Y0 + 3.3, 1.4]],
@@ -1080,18 +1087,22 @@ const MODEL_B = {
     shunt: [['RS1 分流電阻（錳銅）', 12.1, Y0 + 0.42, 0.3], ['電流感測放大器', 12.1, Y0 + 0.08, -0.75]],
     oring: [['Q31–Q34 熱插拔 / ORing MOSFET', 13.2, Y0 + 0.15, 0.0], ['熱插拔控制器', 13.2, Y0 + 0.1, -2.8], ['TVS 突波吸收二極體', 13.2, Y0 + 0.3, 2.8]],
     connector: [['52 V 銅夾', 16.0, 2.35, -1.1], ['RTN 銅夾（回流）', 16.0, 2.35, 1.3], ['訊號針腳：PMBus · CAN · 存在偵測', 16.3, 1.6, -2.6], ['內部銅排 +52 V', 14.17, Y0 + 0.1, -1.1], ['內部銅排 RTN', 14.17, Y0 + 0.1, 1.3], ['連接器本體', 14.9, 2.6, 0.1]],
-    dsp_pri: [['Primary DSP（圖騰柱 PFC 控制）', -2.0, Y0 + 1.45, 3.07], ['控制子卡', -1.0, Y0 + 1.8, 2.95]],
-    dsp_sec: [['Secondary DSP（PMBus / CAN）', 8.0, Y0 + 1.3, 3.13], ['EEPROM / 監控 IC', 8.95, Y0 + 1.2, 3.13], ['CAN 收發器', 12.4, Y0 + 0.1, -2.1]],
+    dsp_pri: [['Primary DSP（韌體 2 · 圖騰柱 PFC）', -2.0, Y0 + 1.45, 3.07], ['控制子卡', -1.0, Y0 + 1.8, 2.95]],
+    dsp_sec: [['Secondary DSP（韌體 3 · PMBus / CAN）', 8.0, Y0 + 1.3, 3.13], ['EEPROM / 監控 IC', 8.95, Y0 + 1.2, 3.13], ['CAN 收發器', 12.4, Y0 + 0.1, -2.1]],
     fan: [['風扇 · 前方進風', -14.5, 3.85, 1.7], ['扇葉 / 馬達', -15.0, 2.15, 1.7]],
     pcb: [['隔離帶（白色虛線）', 4.4, 0.51, -3.55], ['安規開槽 (slot)', 4.4, 0.51, -0.05], ['一次側 · 高壓區', 0.4, 0.51, 3.3], ['二次側 · 52 V SELV', 8.6, 0.51, -3.4]],
-    housing: [['把手', -16.05, 3.2, 3.15], ['綠色卸除卡榫', -15.35, 0.5, -3.1], ['狀態 LED：AC OK · DC OK · ALERT', -15.15, 3.75, -1.75], ['前面板進風孔', -15.1, 3.7, 1.7]],
+    housing: [['把手', -16.05, 3.2, 3.15], ['綠色卸除卡榫', -15.35, 0.5, -3.1], ['狀態 LED：AC A · AC B · DC OK', -15.15, 3.75, -1.75], ['前面板進風孔', -15.1, 3.7, 1.7]],
   },
   exploreNote: () => `<div><p class="chain-t">和 12 V 機種比一比</p>${CMP_HTML}</div>`,
   defs: [
-   { id:'ac_inlet', zone:'ac', name:'高電流 AC 輸入', en:'High-current AC Inlet (single feed)', stage:0, explode:[-3,1.5,0],
-     desc:'4.4 kW 在 230 Vac 時輸入電流約 20 A，已經超過歐規 C20 插座的 16 A。所以這類電源常用 277 Vac 供電，或改用專用的高電流連接器。這台只有一路輸入，備援改在機櫃層級做：多台 PSU 並聯，再加上機櫃電池 (BBU)。',
-     specs:[['輸入電壓','200–277 Vac（部分機種也支援高壓直流）'],['頻率','50 / 60 Hz'],['輸入電流','≈ 16 A @ 277 Vac 滿載；≈ 20 A @ 230 Vac'],['備援','機櫃層級：N+1 PSU + BBU']],
+   { id:'ac_inlet', zone:'ac', name:'AC 輸入插座 ×2', en:'High-current AC Inlets · Feed A / Feed B', stage:0, explode:[-3,1.5,0],
+     desc:'兩個輸入插座分別接兩路獨立的配電（Feed A / Feed B），由 ATS 選一路使用。4.4 kW 在 230 Vac 時輸入電流約 20 A，已經超過歐規 C20 插座的 16 A，所以這類電源常用 277 Vac 供電，或改用專用的高電流連接器。',
+     specs:[['輸入電壓','200–277 Vac（部分機種也支援高壓直流）'],['頻率','50 / 60 Hz'],['輸入電流','≈ 16 A @ 277 Vac 滿載；≈ 20 A @ 230 Vac'],['備援','雙路 AC + ATS；兩路都斷時由機櫃 BBU 接手']],
      tip:'為什麼是 277 V？北美資料中心常用 480 V 三相配電，它的相電壓正好是 480 ÷ √3 ≈ 277 V，可以少一級變壓器、降低線路損耗。' },
+   { id:'ats', zone:'ac', name:'ATS 自動轉換開關', en:'Automatic Transfer Switch (dual feed)', stage:0, explode:[0,3,0],
+     desc:'監測 Feed A / Feed B 兩路 AC。主路異常時用繼電器在數毫秒內切到另一路，切換空檔由 Bulk 電容撐過，52 V 輸出不中斷，機櫃電池 (BBU) 也不用出動；只有兩路同時斷電時才輪到 BBU。ATS 有自己的 MCU 和韌體，負責偵測與切換時序。',
+     specs:[['偵測項目','欠壓、過壓、頻率異常、掉電'],['切換元件','繼電器（也有 SCR 混合式）'],['切換時間','數 ms 到 10 ms 等級，依設計'],['控制','ATS MCU（獨立韌體），和一次側 DSP 溝通']],
+     tip:'到這台的「掉電模擬」試試：只切斷 Feed A，ATS 切到 B 路、BBU 不會放電；兩路一起切斷，才由 BBU 接手。' },
    { id:'fuse', zone:'ac', name:'保險絲', en:'Fuse (Time-lag, 277 Vac rated)', stage:1, explode:[0,2.5,0],
      desc:'最後一道過電流保護，內部短路時熔斷防止起火。因為輸入可能高達 277 Vac，保險絲的額定電壓必須涵蓋它，不能沿用 250 V 的料。',
      specs:[['類型','慢熔 T 型'],['額定','例：300 Vac / 25 A（依設計）'],['認證','UL / IEC 安規認證元件']],
@@ -1157,8 +1168,8 @@ const MODEL_B = {
      specs:[['電源接點','52 V / RTN 銅夾'],['訊號','PMBus、存在偵測、告警等'],['安規','52 V < 60 V，屬於安全特低電壓 (SELV)']],
      tip:'48 V 級架構的電壓上限通常停在 60 V 以下，就是為了維持 SELV 等級，維運人員觸碰匯流排的安全要求比高壓直流寬鬆很多。OCP 的 Open Rack 是這類架構的公開標準之一。' },
    { id:'dsp_pri', zone:'control', name:'一次側 DSP', en:'Primary-side DSP (Totem-pole PFC control)', stage:2, explode:[0,5,0],
-     desc:'控制圖騰柱 PFC：偵測 AC 極性、決定慢臂換向時機、控制快臂的電流迴路，並監測 Bulk 電壓與 AC 掉電。',
-     specs:[['控制對象','圖騰柱 PFC、湧浪繼電器'],['量測','Vin、Iin、Vbulk、AC 掉電偵測'],['通訊','經數位隔離器到二次側']],
+     desc:'控制圖騰柱 PFC：偵測 AC 極性、決定慢臂換向時機、控制快臂的電流迴路，並監測 Bulk 電壓與 AC 掉電；也和 ATS MCU 交換兩路 AC 的狀態。',
+     specs:[['控制對象','圖騰柱 PFC、湧浪繼電器'],['量測','Vin、Iin、Vbulk、AC 掉電偵測'],['通訊','經數位隔離器到二次側；UART 到 ATS MCU']],
      tip:'圖騰柱 PFC 最難的是 AC 過零點：慢臂換向時容易產生電流突波，DSP 要用軟啟動脈波、調整時序來壓制它。' },
    { id:'dsp_sec', zone:'control', name:'二次側 DSP', en:'Secondary-side DSP · Interleaved LLC · Droop sharing · PMBus', stage:7, explode:[0,5,0],
      desc:'控制兩相 LLC 的頻率與相位、SR 時序、輸出電壓與保護，並透過 PMBus 回報給管理系統。多台 PSU 並在同一條匯流排上時，它負責均流控制。',
@@ -1173,13 +1184,14 @@ const MODEL_B = {
      specs:[['層數','6–10 層'],['銅厚','2–4 oz（大電流層）'],['安規','依 IEC 62368-1 設計絕緣距離']],
      tip:'GaN 電路對佈局非常敏感：功率迴路的寄生電感只要幾 nH，就會在高速切換時產生明顯的電壓尖峰。' },
    { id:'housing', zone:'mech', name:'外殼與前面板', en:'Chassis · Handle · Latch · Status LEDs', stage:null, explode:[0,-1.2,0], labelAt:[-15.4,4.9,-1.8], focus:[-14.6,2.0,-0.2,13],
-     desc:'金屬外殼提供保護、EMI 屏蔽和接地。前面板有把手、卸除卡榫和狀態 LED（AC OK / DC OK / ALERT），支援熱插拔更換。',
-     specs:[['熱插拔','可在帶電匯流排上插拔'],['LED','AC OK、DC OK、ALERT'],['外形','依機櫃 / 電源架規格']],
+     desc:'金屬外殼提供保護、EMI 屏蔽和接地。前面板有把手、卸除卡榫和狀態 LED（AC A / AC B / DC OK），支援熱插拔更換。',
+     specs:[['熱插拔','可在帶電匯流排上插拔'],['LED','AC A、AC B、DC OK'],['外形','依機櫃 / 電源架規格']],
      tip:'在 48 V 級機櫃裡，一個電源架通常裝好幾台 PSU，以 N+1 方式備援，壞一台不影響運作。' },
   ],
   questions: [
    { q:'這台 PSU 沒有橋式整流器。哪個零件同時負責「整流」和「PFC 升壓」？', a:['pfc_sw','pfc_l'], ex:'圖騰柱 PFC：慢臂以 50/60 Hz 換向負責整流，快臂 (GaN) 高頻切換負責升壓。點開關或電感都算對。' },
-   { q:'失去 AC 後，哪個零件決定 PSU 能撐多久、直到機櫃電池 (BBU) 接手？', a:['bulk'], ex:'Bulk 電容 1500 µF 從 400 V 放到 300 V 約可釋放 52 J，4.4 kW 滿載約撐 11.6 ms。' },
+   { q:'ATS 切換的空檔，或兩路 AC 都斷到 BBU 接手之前，是哪個零件撐住 PSU 的輸出？', a:['bulk'], ex:'Bulk 電容 1500 µF 從 400 V 放到 300 V 約可釋放 52 J，4.4 kW 滿載約撐 11.6 ms，足以涵蓋 ATS 約 8 ms 的切換。' },
+   { q:'Feed A 停電時，哪個零件會在數毫秒內切到 Feed B，讓機櫃電池 (BBU) 不必出動？', a:['ats'], ex:'ATS 自動轉換開關，有自己的 MCU 與韌體；切換空檔由 Bulk 電容撐過。' },
    { q:'PSU 插進帶電的 52 V 匯流排時，限制湧入電流、並防止電流倒灌的是？', a:['oring'], ex:'熱插拔 / ORing 控制器讓 MOSFET 慢慢導通，運作中當理想二極體，短路時快速關斷。' },
    { q:'哪個零件直接夾住機櫃背面的 52 V 銅匯流排？', a:['connector'], ex:'匯流排夾式輸出：兩組銅夾分別接 52 V 與 RTN，旁邊是訊號針腳。' },
    { q:'關斷時要承受約 2 倍輸出電壓再加振鈴，所以要用 100–150 V 耐壓的是哪些 MOSFET？', a:['sr'], ex:'同步整流 MOSFET。52 V 輸出的 SR 耐壓比 12 V 機種高很多，但電流小很多。' },
@@ -1195,9 +1207,10 @@ const MODEL_B = {
    { q:'主輸出關閉時，PSU 自己的 DSP 和風扇由誰供電？', a:['sb'], ex:'輔助 / 待機 Flyback 電源。' },
   ],
   waves: {
-    ac: { tdiv: '5 ms/div', note: '277 Vac 輸入時，4.4 kW 滿載的輸入電流約 16 Arms；230 Vac 時約 20 Arms。電流與電壓同相 (PF > 0.99)。', ch: [
-      { n: 'Vin 輸入電壓', v: '200–277 Vac', c: '#ffb547', f: (x, p) => 0.8 * Math.sin(TAU * 2.5 * x - p) },
-      { n: 'Iin 輸入電流', v: '≈ 16 Arms @ 277 V', c: '#5ad1ff', f: (x, p) => 0.45 * Math.sin(TAU * 2.5 * x - p) }] },
+    ac: { tdiv: '5 ms/div', note: '兩路 AC 同時待命，ATS 使用 Feed A；A 路異常時在數 ms 內切到 B 路。277 Vac 滿載時輸入電流約 16 Arms，與電壓同相 (PF > 0.99)。', ch: [
+      { n: 'Feed A', v: '使用中 · 277 Vac', c: '#ffb547', f: (x, p) => 0.58 + 0.3 * Math.sin(TAU * 2.5 * x - p) },
+      { n: 'Feed B', v: '待命', c: '#e59cff', f: (x, p) => 0.0 + 0.3 * Math.sin(TAU * 2.5 * x - p + 0.5) },
+      { n: 'Iin 輸入電流', v: '≈ 16 Arms', c: '#5ad1ff', f: (x, p) => -0.62 + 0.25 * Math.sin(TAU * 2.5 * x - p) }] },
     emi: { tdiv: '5 ms/div', note: 'GaN 快臂切換極快 (高 dv/dt)，雜訊頻譜更寬，所以 EMI 濾波器做成兩級。', ch: [
       { n: '濾波前（GaN 切換雜訊）', v: '', c: '#ff9a6b', f: (x, p) => 0.48 + 0.36 * Math.sin(TAU * 2.5 * x - p) + 0.1 * nz(x + p * 0.37) },
       { n: '兩級濾波後（電網側）', v: '', c: '#ffb547', f: (x, p) => -0.48 + 0.36 * Math.sin(TAU * 2.5 * x - p) }] },
@@ -1231,11 +1244,12 @@ const MODEL_B = {
   pcb: {
     isoX: 4.4, isoLabelZ: 0.3,
     pours: [[-6.9, -3.45, 4.1, 2.5], [4.9, -3.45, 14.6, 3.45], [-14.6, -3.45, -7.2, 0.2]],
-    traces: [[[[-12.2, -3.0], [-10.6, -1.4], [-7.8, -1.0], [-5.9, -0.7], [-4.2, -0.4], [-1.6, -0.6], [0.7, -0.1], [2.6, -0.6], [3.4, -0.1]], 0.45], [[[6.8, -0.1], [9.0, -0.6], [12.1, 0.3], [13.2, -0.4], [14.4, -1.1]], 0.8], [[[13.2, 1.3], [14.4, 1.3]], 0.8]],
+    traces: [[[[-12.4, -1.75], [-11.9, 0.9], [-10.6, -1.4], [-7.8, -1.0], [-5.9, -0.7], [-4.2, -0.4], [-1.6, -0.6], [0.7, -0.1], [2.6, -0.6], [3.4, -0.1]], 0.45], [[[6.8, -0.1], [9.0, -0.6], [12.1, 0.3], [13.2, -0.4], [14.4, -1.1]], 0.8], [[[13.2, 1.3], [14.4, 1.3]], 0.8]],
     slots: [[4.4, -0.4, 0.3]],
     parts: [
-      [-12.2,-3.0,1.5,0.6,'F1'],[-12.2,1.0,0.8,1.5,'CX1'],[-10.6,-1.4,0.9,2.3,'LF1'],[-9.0,-1.4,0.9,2.3,'LF2'],[-9.8,1.4,0.8,1.5,'CX2'],
-      [-10.2,-3.15,0.8,0.3,'CY1'],[-9.4,-3.15,0.8,0.3,'CY2'],[-7.8,0.6,0.4,1.0,'RT1'],[-7.8,-1.6,1.0,1.1,'K1'],
+      [-12.4,-0.9,1.2,1.4,'K1'],[-12.4,-2.6,1.2,1.4,'K2'],[-11.45,-1.75,0.6,0.6,'U1'],
+      [-11.9,0.9,1.5,0.6,'F1'],[-12.0,2.6,0.8,1.5,'CX1'],[-10.6,-1.4,0.9,2.3,'LF1'],[-9.0,-1.4,0.9,2.3,'LF2'],[-9.8,1.4,0.8,1.5,'CX2'],
+      [-10.2,-3.15,0.8,0.3,'CY1'],[-9.4,-3.15,0.8,0.3,'CY2'],[-7.8,0.6,0.4,1.0,'RT1'],[-7.8,-1.6,1.0,1.1,'K3'],
       [-5.9,-2.25,1.1,2.8,'L1'],[-5.9,0.85,1.1,2.8,'L2'],
       [-4.235,-2.95,0.5,1.0,'Q1'],[-4.235,-1.8,0.5,1.0,'Q2'],[-4.235,-0.65,0.5,1.0,'Q3'],[-4.235,0.5,0.5,1.0,'Q4'],[-4.235,1.65,0.5,1.0,'Q5'],[-4.235,2.8,0.5,1.0,'Q6'],
       [2.6,-2.9,0.9,0.9,'LR1'],[2.6,-1.75,0.6,0.7,'CR1'],[2.6,0.3,0.9,0.9,'LR2'],[2.6,1.45,0.6,0.7,'CR2'],
@@ -1248,22 +1262,34 @@ const MODEL_B = {
     hazards: [[-7.6, 3.2, 12], [3.1, 3.2, 11]],
   },
   build() {
-    buildHousing([{ z: -1.75, w: 1.8 }], this.sticker);
+    buildHousing([{ z: -0.9, w: 1.4 }, { z: -2.6, w: 1.4 }], this.sticker);
     buildPcb(this.pcb);
     buildFan();
     begin('ac_inlet');
-    inletBody(-1.75, 1.8);
-    wire([[-13.4, 2.4, -1.35], [-12.95, 2.9, -1.35], [-12.75, Y0 + 0.1, -1.35]], 0x7a4a24);
-    wire([[-13.4, 2.0, -2.15], [-12.95, 2.6, -2.15], [-12.75, Y0 + 0.1, -2.15]], 0x2747a8);
-    wire([[-13.4, 1.4, -1.75], [-13.15, 0.95, -1.75], [-13.05, 0.55, -1.7]], 0x9bc23c);
+    for (const z of [-0.9, -2.6]) {
+      inletBody(z, 1.4);
+      wire([[-13.4, 2.3, z + 0.3], [-13.15, 3.0, z + 0.3], [-12.95, 2.2, z + 0.3]], 0x7a4a24);
+      wire([[-13.4, 2.0, z - 0.3], [-13.15, 2.8, z - 0.3], [-12.95, 1.9, z - 0.3]], 0x2747a8);
+      wire([[-13.4, 1.4, z], [-13.2, 0.95, z], [-13.1, 0.55, z + 0.05]], 0x9bc23c);
+    }
+    begin('ats');
+    pbox(2.2, 0.08, 3.6, 0x1b3d6b, -12.2, -1.75, { r: 0.5 });
+    for (const [z, k] of [[-0.9, 'A'], [-2.6, 'B']]) {
+      pbox(1.1, 1.5, 1.3, C.blue, -12.4, z, { r: 0.42 }, Y0 + 0.08);
+      pbox(0.7, 0.02, 0.9, 0xe9edf2, -12.4, z, { r: 0.8 }, Y0 + 1.58);
+      relayLed[k] = put(SPH(0.12), 0x334433, { e: 0x000000 }, -11.75, Y0 + 0.3, z);
+    }
+    chip(-11.45, -1.75, 0.5, 0.5, 0.12, Y0 + 0.08);             // ATS MCU
+    chip(-11.45, -0.9, 0.3, 0.2, 0.08, Y0 + 0.08, 0x8a6a3a);     // relay drivers
+    chip(-11.45, -2.6, 0.3, 0.2, 0.08, Y0 + 0.08, 0x8a6a3a);
     begin('fuse');
-    for (const x of [-12.75, -11.65]) pbox(0.14, 0.42, 0.42, 0xd0d4da, x, -3.0, METAL);
-    put(CYL(0.2, 0.95, 20), 0xe9e4d8, { r: 0.6 }, -12.2, Y0 + 0.45, -3.0, 0, 0, Math.PI / 2);
-    for (const x of [-12.72, -11.68]) put(CYL(0.22, 0.14, 20), 0xd0d4da, METAL, x, Y0 + 0.45, -3.0, 0, 0, Math.PI / 2);
+    for (const x of [-12.45, -11.35]) pbox(0.14, 0.42, 0.42, 0xd0d4da, x, 0.9, METAL);
+    put(CYL(0.2, 0.95, 20), 0xe9e4d8, { r: 0.6 }, -11.9, Y0 + 0.45, 0.9, 0, 0, Math.PI / 2);
+    for (const x of [-12.42, -11.38]) put(CYL(0.22, 0.14, 20), 0xd0d4da, METAL, x, Y0 + 0.45, 0.9, 0, 0, Math.PI / 2);
     begin('emi');
     toroid(-10.6, -1.4, 0.7, 0.3, 0x2b2c2f, C.copper, Math.PI * 1.5, Y0 + 1.1, true);
     toroid(-9.0, -1.4, 0.7, 0.3, 0x2b2c2f, C.copper, Math.PI * 1.5, Y0 + 1.1, true);
-    for (const [x, z] of [[-12.2, 1.0], [-9.8, 1.4]]) pbox(0.7, 1.0, 1.4, C.yellow, x, z, { r: 0.5 });
+    for (const [x, z] of [[-12.0, 2.6], [-9.8, 1.4]]) pbox(0.7, 1.0, 1.4, C.yellow, x, z, { r: 0.5 });
     for (const x of [-10.2, -9.4]) {
       put(CYL(0.34, 0.12, 22), 0x2f6fd6, { r: 0.45 }, x, Y0 + 0.7, -3.15, Math.PI / 2, 0, 0);
       for (const dx of [-0.12, 0.12]) pbox(0.04, 0.4, 0.04, 0xb8bcc2, x + dx, -3.15, METAL);
@@ -1340,10 +1366,11 @@ const MODEL_B = {
   },
   leds(s, live) {
     const g = 0x2bd66a;
-    if (!live) { setLed(leds[0], g); setLed(leds[1], g); setLed(leds[2], 0); return; }
-    setLed(leds[0], s.feed.A ? g : 0xff3b3b);
-    setLed(leds[1], s.out ? g : 0);
-    setLed(leds[2], !s.inputOK ? (Math.sin(time * 8) > 0 ? 0xffa621 : 0) : 0);
+    if (!live) { setLed(leds[0], g); setLed(leds[1], g); setLed(leds[2], g); setLed(relayLed.A, g); setLed(relayLed.B, 0); return; }
+    const blink = Math.sin(time * 14) > 0;
+    setLed(leds[0], s.feed.A ? g : 0xff3b3b); setLed(leds[1], s.feed.B ? g : 0xff3b3b);
+    setLed(leds[2], s.out ? (s.inputOK ? g : 0xffa621) : 0);   // amber = holding up on Bulk
+    for (const k of ['A', 'B']) setLed(relayLed[k], s.state === 'stable' && s.sel === k ? g : s.state === 'transfer' && s.target === k && blink ? 0xffb020 : 0);
   },
 };
 /* ================================================================
@@ -1822,8 +1849,8 @@ function resetSim() {
     Object.assign(sim, { feed: { A: true, B: true }, timer: 0, target: null, retTimer: 0, vout: 12.2, load: 3000 });
     slog('兩路 AC 正常，ATS 使用 A 路（優先）');
   } else if (M.simKind === 'bbu') {
-    Object.assign(sim, { feed: { A: true }, bbuOn: true, bbuActive: false, vbus: 52, vout: 52, srv: true, load: 4400, pfcReady: true, restartT: 0 });
-    slog('AC 正常，PSU 供應 52 V 匯流排；BBU 待命');
+    Object.assign(sim, { feed: { A: true, B: true }, timer: 0, target: null, retTimer: 0, bbuOn: true, bbuActive: false, vbus: 52, vout: 52, srv: true, load: 4400 });
+    slog('兩路 AC 正常，ATS 使用 A 路；PSU 供應 52 V 匯流排，BBU 待命');
   } else {
     Object.assign(sim, { feed: { A: true }, soc: 0.9, mode: 'chg', cv: false, full: false, cut: false, vpack: NS * ocvCell(0.9) + ICC * RPACK, ibat: -ICC, vbus: 52, vout: 52, srv: true, load: 3000, temp: 25, warned: false });
     slog('PSU 供電中，BBU 以 6 A 定電流 (CC) 充電，SOC 90%');
@@ -1867,8 +1894,9 @@ function tickBat(d) {
   if (s.t - s.lastRec >= 2) { s.lastRec = s.t; s.buf.push([s.t, s.vbus, s.soc * 100, I, V]); if (s.buf.length > 1200) s.buf.splice(0, s.buf.length - 1200); }
 }
 
-function tickATS(d) {
-  const s = sim; s.t += d;
+/* ATS state machine shared by the 12 V and 52 V models: detect a dead feed, transfer (break-before-make),
+   return to the preferred A feed once it has been stable. Returns whether the PSU currently has AC. */
+function atsSwitch(s, d) {
   if (s.state === 'stable') {
     if (s.sel && !s.feed[s.sel]) { s.state = 'detect'; s.timer = ATS_DETECT; slog(`${s.sel} 路失電，ATS 偵測中…`); }
     else if (!s.sel) { const k = s.feed.A ? 'A' : (s.feed.B ? 'B' : null); if (k) { s.state = 'transfer'; s.target = k; s.timer = ATS_TRANSFER; slog(`${k} 路有電了，繼電器閉合中…`); } }
@@ -1881,10 +1909,17 @@ function tickATS(d) {
     s.timer -= d;
     if (s.timer <= 0) {
       s.sel = s.target; s.state = 'stable'; s.retTimer = 0;
-      if (s.feed[s.sel]) { const gap = s.lostAt != null ? (s.t - s.lostAt) : 0; slog(`已接上 ${s.sel} 路。斷電 ${gap.toFixed(1)} ms，Bulk 最低 ${s.minBulk.toFixed(0)} V，主輸出${s.outDropped ? '曾經中斷 ✗' : '沒有中斷 ✓'}`); }
+      if (s.feed[s.sel]) {
+        const gap = s.lostAt != null ? (s.t - s.lostAt) : 0;
+        slog(`已接上 ${s.sel} 路。斷電 ${gap.toFixed(1)} ms，Bulk 最低 ${s.minBulk.toFixed(0)} V，主輸出${s.outDropped ? '曾經中斷 ✗' : '沒有中斷 ✓'}${M.simKind === 'bbu' && !s.outDropped ? '，BBU 不必出動' : ''}`);
+      }
     }
   }
-  const inOK = !!(s.state === 'stable' && s.sel && s.feed[s.sel]);
+  return !!(s.state === 'stable' && s.sel && s.feed[s.sel]);
+}
+function tickATS(d) {
+  const s = sim; s.t += d;
+  const inOK = atsSwitch(s, d);
   if (s.inputOK && !inOK) { s.lostAt = s.t; s.minBulk = s.bulk; s.outDropped = false; }
   s.inputOK = inOK;
   const vin = inOK ? feedV(s.sel, s.t) : 0;
@@ -1902,17 +1937,16 @@ function tickATS(d) {
 
 function tickBBU(d) {
   const s = sim; s.t += d;
-  if (!s.feed.A) { s.pfcReady = false; s.restartT = 0; }
-  else if (!s.pfcReady) { s.restartT += d; if (s.restartT >= 20) { s.pfcReady = true; slog('AC 穩定，圖騰柱 PFC 啟動，Bulk 回充'); } }
-  const inOK = s.feed.A && s.pfcReady;
-  if (s.inputOK && !inOK) { s.lostAt = s.t; slog('AC 中斷！PSU 送出 AC 異常訊號，改由 Bulk 電容撐住輸出'); }
+  const inOK = atsSwitch(s, d);
+  if (s.inputOK && !inOK) { s.lostAt = s.t; s.minBulk = s.bulk; s.outDropped = false; slog('PSU 沒有 AC 輸入：送出 AC 異常訊號，改由 Bulk 電容撐住輸出'); }
   s.inputOK = inOK;
-  const vin = inOK ? feedV('A', s.t, 392) : 0;
+  const vin = inOK ? feedV(s.sel, s.t, 392) : 0;
   const load = s.srv ? s.load : 0;
   const P = s.out ? load / 0.975 : 10;
   if (inOK) s.bulk += (400 - s.bulk) * Math.min(1, d * 0.15);
   else s.bulk = Math.max(0, s.bulk - P / (1.5e-3 * Math.max(s.bulk, 20)) * d / 1000);
-  if (s.out && s.bulk < 300) { s.out = false; slog(`Bulk 跌破 300 V，PSU 主輸出關閉（保持時間 ${(s.t - (s.lostAt ?? s.t)).toFixed(1)} ms）`); }
+  if (!inOK) s.minBulk = Math.min(s.minBulk, s.bulk);
+  if (s.out && s.bulk < 300) { s.out = false; s.outDropped = true; slog(`Bulk 跌破 300 V，PSU 主輸出關閉（保持時間 ${(s.t - (s.lostAt ?? s.t)).toFixed(1)} ms）`); }
   if (!s.out && inOK && s.bulk > 370) { s.out = true; slog('PSU 恢復 52 V 輸出'); }
   // rack bus
   if (s.out) {
@@ -2430,7 +2464,7 @@ const CMP_HTML = `<div class="cmp">
   <span class="k">PFC</span><span class="v">整流橋 + Boost</span><span class="v now">圖騰柱</span>
   <span class="k">SR 耐壓</span><span class="v">40–60 V</span><span class="v now">100–150 V</span>
   <span class="k">輸出端</span><span class="v">金手指</span><span class="v now">匯流排夾</span>
-  <span class="k">掉電備援</span><span class="v">ATS 雙路</span><span class="v now">BBU 電池</span>
+  <span class="k">掉電備援</span><span class="v">ATS 雙路</span><span class="v now">ATS 雙路 + BBU</span>
 </div>`;
 
 function renderPanel() {
@@ -2488,19 +2522,22 @@ function atsPanelHTML() {
     <div><p class="chain-t">事件紀錄</p><ol id="log"></ol></div>`;
 }
 function bbuPanelHTML() {
-  return `<div><h3>掉電模擬</h3><p class="lead">資料中心的 52 V 機櫃不靠雙路 ATS，而是靠機櫃電池 (BBU) 備援。切斷 AC，看 PSU 先用 Bulk 撐住，再由 BBU 接手匯流排。畫面以慢動作播放。</p></div>
+  return `<div><h3>掉電模擬</h3><p class="lead">這台有兩層備援：PSU 內的 ATS 處理單路斷電，機櫃電池 (BBU) 處理兩路都斷。點下面的按鈕切斷電源，畫面以慢動作播放。</p></div>
     <div class="feeds">
-      <button class="feed ${sim.feed.A ? '' : 'off'}" id="acTgl"><b>AC 輸入</b><span>${sim.feed.A ? '有電' : '斷電'}</span><small>點一下切換</small></button>
+      <button class="feed ${sim.feed.A ? '' : 'off'}" id="feedA"><b>Feed A</b><span>${sim.feed.A ? '有電' : '斷電'}</span><small>點一下切換</small></button>
+      <button class="feed ${sim.feed.B ? '' : 'off'}" id="feedB"><b>Feed B</b><span>${sim.feed.B ? '有電' : '斷電'}</span><small>點一下切換</small></button>
       <button class="feed ${sim.bbuOn ? '' : 'off'}" id="bbuTgl"><b>機櫃 BBU</b><span>${sim.bbuOn ? '已安裝' : '未安裝'}</span><small>點一下切換</small></button>
     </div>
+    <div class="scn"><button class="btn" id="scBoth">兩路同時斷電</button><button class="btn" id="scReset">全部恢復</button></div>
     <dl class="readouts">
-      <div><dt>AC / PFC</dt><dd id="ro1">–</dd></div><div><dt>PSU 52 V 輸出</dt><dd id="ro2">–</dd></div>
-      <div><dt>Bulk 電壓</dt><dd id="ro3">–</dd></div><div><dt>匯流排電壓</dt><dd id="ro4">–</dd></div>
-      <div><dt>BBU</dt><dd id="ro5">–</dd></div><div><dt>伺服器</dt><dd id="ro6">–</dd></div>
+      <div><dt>ATS 狀態</dt><dd id="ro1">–</dd></div><div><dt>使用中的輸入</dt><dd id="ro2">–</dd></div>
+      <div><dt>Bulk 電壓</dt><dd id="ro3">–</dd></div><div><dt>PSU 52 V 輸出</dt><dd id="ro4">–</dd></div>
+      <div><dt>匯流排電壓</dt><dd id="ro5">–</dd></div><div><dt>BBU</dt><dd id="ro6">–</dd></div>
+      <div><dt>伺服器</dt><dd id="ro7">–</dd></div><div><dt>誰在供電</dt><dd id="ro8">–</dd></div>
     </dl>
     <label class="field"><span class="row"><span>負載（每台 PSU）</span><output id="loadOut" class="mono">${sim.load} W</output></span><input type="range" id="load" min="400" max="4400" step="200" value="${sim.load}"></label>
     ${speedSelect()}
-    <p class="note">失去 AC 後，PSU 靠 1500 µF 的 Bulk 再撐約 11.6 ms（滿載），接著匯流排降到 50 V 時由 BBU 接手。拿掉 BBU 再斷一次電，看看伺服器會怎樣。<b>BBU 接手的電壓門檻和時間為示意值。</b>想看電池內部怎麼運作，在上方切換到「BBU 電池備援」機種。</p>
+    <p class="note"><b>只斷一路：</b>ATS 約 ${ATS_DETECT + ATS_TRANSFER} ms 切到另一路，Bulk 撐過空檔（滿載約 11.6 ms），BBU 不必出動。<b>兩路都斷：</b>Bulk 撐完後匯流排降到 50 V，由 BBU 接手。拿掉 BBU 再斷兩路，看看伺服器會怎樣。BBU 接手門檻與時間為示意值；想看電池內部，在上方切換到「BBU 電池備援」機種。</p>
     <div><p class="chain-t">事件紀錄</p><ol id="log"></ol></div>`;
 }
 
@@ -2543,7 +2580,6 @@ panelBody.addEventListener('click', e => {
     case 'feedA': case 'feedB': { const k = t.id.slice(-1); sim.feed[k] = !sim.feed[k]; slog(`手動將 Feed ${k} ${sim.feed[k] ? '恢復供電' : '斷電'}`); renderPanel(); break; }
     case 'scBoth': sim.feed.A = false; sim.feed.B = false; slog('情境：兩路同時斷電'); renderPanel(); break;
     case 'scReset': sim.feed.A = true; sim.feed.B = true; slog('兩路恢復供電'); renderPanel(); break;
-    case 'acTgl': sim.feed.A = !sim.feed.A; slog(sim.feed.A ? 'AC 恢復供電' : '手動切斷 AC'); renderPanel(); break;
     case 'bbuTgl': sim.bbuOn = !sim.bbuOn; slog(sim.bbuOn ? '裝上機櫃 BBU' : '移除機櫃 BBU'); renderPanel(); break;
     case 'batAc': sim.feed.A = !sim.feed.A; slog(sim.feed.A ? '手動恢復機櫃 AC' : '手動切斷機櫃 AC'); renderPanel(); break;
     case 'soc100': Object.assign(sim, { soc: 1, full: true, cv: false, cut: false }); slog('電量設為 100%'); break;
@@ -2606,12 +2642,15 @@ function updateSimUI(force) {
     set('ro7', s.temp.toFixed(1) + ' °C', s.temp < 40 ? 'good' : s.temp < 50 ? 'warn' : 'badc');
     set('ro8', s.srv ? '運作中' : '已斷電', s.srv ? 'good' : 'badc');
   } else {
-    set('ro1', s.inputOK ? '正常' : s.feed.A ? 'PFC 啟動中' : 'AC 中斷', s.inputOK ? 'good' : s.feed.A ? 'warn' : 'badc');
-    set('ro2', s.out ? (s.inputOK ? '52.0 V' : '52.0 V 保持中') : '關閉', s.out ? (s.inputOK ? 'good' : 'warn') : 'badc');
+    const st = s.state === 'detect' ? ['偵測異常中', 'warn'] : s.state === 'transfer' ? ['繼電器切換中', 'warn'] : s.sel ? ['穩定', 'good'] : ['兩路都沒電', 'badc'];
+    set('ro1', st[0], st[1]);
+    set('ro2', s.inputOK ? `Feed ${s.sel}` : '（無）', s.inputOK ? 'good' : 'badc');
     set('ro3', s.bulk.toFixed(0) + ' V', s.bulk > 350 ? 'good' : s.bulk > 300 ? 'warn' : 'badc');
-    set('ro4', s.vbus.toFixed(1) + ' V', s.vbus > 51 ? 'good' : s.vbus > 46 ? 'warn' : 'badc');
-    set('ro5', !s.bbuOn ? '未安裝' : s.bbuActive ? '放電中' : '待命 / 充電', !s.bbuOn ? 'badc' : s.bbuActive ? 'warn' : 'good');
-    set('ro6', s.srv ? '運作中' : '已斷電', s.srv ? 'good' : 'badc');
+    set('ro4', s.out ? (s.inputOK ? '52.0 V' : '52.0 V 保持中') : '關閉', s.out ? (s.inputOK ? 'good' : 'warn') : 'badc');
+    set('ro5', s.vbus.toFixed(1) + ' V', s.vbus > 51 ? 'good' : s.vbus > 46 ? 'warn' : 'badc');
+    set('ro6', !s.bbuOn ? '未安裝' : s.bbuActive ? '放電中' : '待命 / 充電', !s.bbuOn ? 'badc' : s.bbuActive ? 'warn' : 'good');
+    set('ro7', s.srv ? '運作中' : '已斷電', s.srv ? 'good' : 'badc');
+    set('ro8', s.out ? (s.inputOK ? 'PSU（AC）' : 'PSU（Bulk 保持）') : s.bbuActive ? 'BBU 電池' : '沒有', s.out && s.inputOK ? 'good' : s.out || s.bbuActive ? 'warn' : 'badc');
   }
   if (s.logDirty) {
     const l = $('#log');
@@ -2775,8 +2814,8 @@ const STRIP = {
     legend: [['Vin（ATS 之後）', '#ffb547'], ['Vbulk', '#ff4d4d'], ['12 V 輸出', '#2fd4b5'], ['PWOK', '#5aa9ff']],
     note: '紅色虛線是 300 V：Bulk 低於它，LLC 就無法維持輸出。藍色虛線 320 V 是 PWOK 預警線，PWOK 會比輸出先掉，讓伺服器有時間反應。' },
   bbu: { lanes: [['Vin', 1, -420, 420, '#ffb547'], ['Vbulk', 2, 0, 450, '#ff4d4d', 0], ['Vbus / BBU', 3, 0, 58, '#2fd4b5', 1]], lines: [[1, 300, 'rgba(255,77,94,.75)', '300 V'], [2, 50, 'rgba(90,169,255,.6)', '50 V']], dig: [4, 2, 22, 3, '#5aa9ff'],
-    legend: [['Vin', '#ffb547'], ['Vbulk', '#ff4d4d'], ['52 V 匯流排', '#2fd4b5'], ['BBU 放電中', '#5aa9ff']],
-    note: 'Bulk 跌破 300 V（紅線）PSU 就停止輸出；匯流排降到 50 V（藍線）時 BBU 接手。沒有 BBU 時，匯流排會一路掉到伺服器關機。' },
+    legend: [['Vin（ATS 之後）', '#ffb547'], ['Vbulk', '#ff4d4d'], ['52 V 匯流排', '#2fd4b5'], ['BBU 放電中', '#5aa9ff']],
+    note: '單路斷電時 Vin 只會短暫中斷（ATS 切換），Bulk 掉一點就回來。兩路都斷時，Bulk 跌破 300 V（紅線）PSU 停止輸出，匯流排降到 50 V（藍線）由 BBU 接手；沒有 BBU 時伺服器會斷電。' },
 };
 function updateScopeHead() {
   if (mode === 'ats') {
@@ -2996,7 +3035,7 @@ function updateLiveLabels() {
   if (mode !== 'ats') return;
   for (const k in feedLabels) {
     const fl = feedLabels[k], ok = sim.feed[k], used = sim.inputOK && sim.sel === k;
-    fl.el.textContent = M.simKind === 'ats' ? `Feed ${k} · ${ok ? (used ? '使用中' : '待命') : '斷電'}` : `AC · ${ok ? (sim.inputOK ? '正常' : '啟動中') : '斷電'}`;
+    fl.el.textContent = `Feed ${k} · ${ok ? (used ? '使用中' : '待命') : '斷電'}`;
     fl.el.style.color = ok ? (used ? '#3ddc84' : '#e6edf3') : '#ff4d5e';
     fl.el.style.borderColor = ok ? '#2f4a3a' : '#7a2a33';
   }
