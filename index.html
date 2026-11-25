@@ -22,7 +22,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 #app{position:relative;width:100%;height:100%;overflow:hidden}
 #stage{position:absolute;inset:0}
 #stage canvas{display:block;width:100%;height:100%;touch-action:none}
-#labels{position:absolute;inset:0;pointer-events:none}
+#labels{position:absolute;inset:0;pointer-events:none;z-index:1}
 .lbl{font:500 11px/1.2 var(--f-body);color:var(--fg);background:rgba(8,12,17,.82);border:1px solid var(--line);border-radius:4px;padding:3px 7px;white-space:nowrap;pointer-events:none;display:flex;align-items:center;gap:5px}
 .lbl i{width:7px;height:7px;border-radius:50%;display:inline-block}
 .zlbl{font:600 12px/1.2 var(--f-display);letter-spacing:.06em;padding:4px 9px;border-radius:3px;color:#0c1117;pointer-events:none;white-space:nowrap}
@@ -1861,7 +1861,8 @@ function buildModel() {
       m.position.set(x, y, z); m.visible = false; teGroup.add(m);
       teProbe[k] = { m, lo: css2d('plbl', `<i></i>${t}`, new THREE.Vector3(x, y + 0.4, z), teGroup) };
     }
-  }
+    buildFixture();
+  } else { fixComps = {}; fixPick = []; }
 }
 
 /* ================= STATE ================= */
@@ -2625,6 +2626,7 @@ panelBody.addEventListener('click', e => {
       case 'tPartX': tst.part = null; if (tst.sel) tst.cat = TE.byId[tst.sel].cat; renderPanel(); break;
       case 'tRunCat': teRunCat(); renderPanel(); break;
       case 'tReport': tst.view = 'report'; renderTestInfo(); break;
+      case 'tFixAll': teFixOverview(); break;
       case 'tResetS': if (!tst.run && !tst.queue.length) { delete tst.S[tst.cur]; tst.msg = null; tst.diag = null; teSave(); renderPanel(); renderTestInfo(); updateScopeHead(); toast(tst.cur === 'blind' ? '換了一台新的盲測樣品' : '這台樣品的測試紀錄已清除'); } break;
       case 'tReveal': { const S = teS(); S.revealed = true; teSave(); tst.view = 'report'; renderTestInfo(); renderPanel(); break; }
     }
@@ -2791,9 +2793,14 @@ const TE_PROBES = {
   iin:    ['電流探棒夾 L 線', -13.15, 3.5, -0.3],
   relay:  ['K1 / K2 繼電器', -12.4, Y0 + 2.3, -1.75],
   bulk:   ['Vbulk 高壓差動探棒', -1.6, Y0 + 3.9, -0.6],
-  vout:   ['Vout：量在 52 V / RTN 銅夾', 16.0, 3.0, 0.1],
-  load:   ['電子負載（Iout）', 17.6, 2.2, 1.3],
-  sig:    ['PMBus / PWOK / PS_ON 針腳', 16.3, 2.1, -2.6],
+  vout:   ['Vout：Kelvin 端子（治具板）', 19.3, 1.95, 3.0],
+  ripple: ['示波器：漣波 BNC', 20.6, 1.85, 3.9],
+  load:   ['電子負載接線柱', 24.3, 2.6, 0.1],
+  sig:    ['PMBus 轉接器 / PS_ON 開關', 21.0, 1.9, -3.3],
+  fxshunt:['參考分流器 → 功率分析儀', 21.3, 1.95, -1.1],
+  capbank:['電容組 K1 / K2', 19.9, 2.6, 0.1],
+  short:  ['短路開關', 22.4, 2.4, 3.2],
+  ext:    ['外部 52 V 電源輸入', 25.25, 2.2, 3.0],
   shunt:  ['RS1 分流電阻', 12.1, Y0 + 0.9, 0.3],
   oring:  ['ORing MOSFET', 13.2, Y0 + 0.7, 0.0],
   fan:    ['風扇轉速 / 噪音計（1 m）', -14.5, 4.3, 1.7],
@@ -2807,9 +2814,9 @@ const TE_PROBES = {
   pe:     ['PE 接地端', -13.15, 1.3, -0.9],
   chassis:['外殼接地點', -15.2, 1.4, 3.1],
   lisn:   ['LISN（傳導量測）', -14.6, 4.0, -1.75],
-  bus:    ['機櫃 52 V 匯流排', 17.8, 3.4, 0.1],
-  bbu:    ['BBU（同一條匯流排）', 18.8, 1.6, 2.6],
-  psu2:   ['並聯的 PSU #2–#4', 18.8, 1.6, -2.6],
+  bus:    ['治具匯流排（52 V / RTN）', 18.55, 2.75, 0.1],
+  bbu:    ['外部輸入：BBU', 24.45, 2.0, 2.2],
+  psu2:   ['外部輸入：並聯 PSU #2–#4', 25.25, 2.2, 3.0],
 };
 const TE_DEFECTS = {
   bulk:  { n: 'Bulk 電容容量衰退', parts: ['bulk'], hint: 'AC 中斷時，是哪個零件在撐住輸出？',
@@ -2834,6 +2841,11 @@ const TE_DEFECTS = {
            ex: 'T2 一次側和二次側繞組之間的絕緣膠帶在繞線時刮破，3000 Vac 耐壓在 41 秒崩潰，絕緣電阻也掉到只有幾 MΩ。' },
   llc:   { n: 'LLC 諧振電容公差過大', parts: ['resonant'], hint: '兩相 LLC 電流不平均，通常是哪組元件的公差造成？',
            ex: 'CR2 的容值偏離約 8%，兩相 LLC 的電流分配變成約 58% / 42%，比較重的那一相損耗和溫度都偏高，滿載效率掉了 1% 以上。' },
+  // fixture / measurement-setup faults: the DUT is fine, the bench is not
+  fxgnd: { n: '漣波量測接地線太長', parts: ['fx:fx_ripple'], fixture: true, hint: 'DUT 不一定有問題。先想想漣波是怎麼量的？',
+           ex: '探棒用 15 cm 的鱷魚夾接地，接地迴路像一支天線，收到 LLC 切換的高頻雜訊，量到約 900 mV 的「假漣波」。改接治具板上的漣波 BNC（0.1 µF + 10 µF，最短接地），漣波就回到正常的 170 mV 左右。' },
+  fxsense: { n: '電壓量測線接錯位置', parts: ['fx:fx_kelvin'], fixture: true, hint: 'PSU 的電壓沒問題，問題在你量在哪裡。',
+           ex: '電壓表的量測線接在負載接線柱上，沒有接 Kelvin 端子。量到的電壓包含 85 A 流過治具銅排、分流器和接點的壓降（約 0.4 V），所以 Vout 看起來偏低、負載調整率超標。' },
 };
 const TE_SAMPLES = [
   { k: 's1', n: '#001 · Golden 樣品', d: [], desc: '已知良品，所有測項都應該 PASS。先用它熟悉每個測項的正常波形。' },
@@ -2841,8 +2853,171 @@ const TE_SAMPLES = [
   { k: 's3', n: '#027 · EVT 樣品', d: ['relay', 'shunt'] },
   { k: 's4', n: '#052 · DVT 樣品', d: ['pfc', 'ycap', 'fan'] },
   { k: 's5', n: '#088 · DVT 樣品', d: ['ntc', 'oring', 'xfmr', 'llc'] },
+  { k: 's6', n: '#093 · 治具除錯', d: ['fxgnd', 'fxsense'], desc: '這台 DUT 其實是良品，但有 <b>2</b> 個問題出在治具或量測接法，量出了假的 FAIL。找出是哪個治具元件（在治具板上點），接好後重測。' },
   { k: 'blind', n: '盲測樣品（隨機 2–3 個問題）', d: null },
 ];
+
+/* ---------- test fixture board (load board behind the PSU's output end) ---------- */
+const FIX_DEFS = [
+  { id: 'fx_bus', name: '匯流排插刀', en: 'Busbar Blades · 52 V / RTN', tests: ['OUT-01', 'OUT-02', 'OUT-12', 'OUT-13', 'EFF-01'],
+    desc: '兩片銅插刀代替機櫃的 52 V / RTN 匯流排，PSU 尾端的銅夾直接夾住它，再經治具銅排接到分流器和負載接線柱。',
+    specs: [['額定', '≥ 120 A 連續'], ['材料', '紫銅鍍錫'], ['接觸電阻', '< 0.1 mΩ（每個接點）']],
+    tip: '治具插拔次數多了，插刀和 PSU 銅夾都會磨損。要定期量接觸電阻：壓降變大，效率和電壓讀值都會看起來變差。' },
+  { id: 'fx_sig', name: '訊號插座', en: 'Signal Receptacle · PMBus / CAN / PS_ON / PWOK / PRESENT', tests: ['COM-01', 'COM-04', 'PRT-08', 'ATS-12'],
+    desc: '對準 PSU 尾端的訊號針腳，把 PMBus（SDA / SCL / SMBAlert）、CAN、PS_ON、PWOK 和存在偵測接到治具板。',
+    specs: [['針腳', 'PMBus、CAN_H / CAN_L、PS_ON、PWOK、PRESENT'], ['特點', '存在偵測是最短針：最後接觸、最先斷開']],
+    tip: '存在偵測針腳最短：PSU 完全插好才接觸，拔出時最先斷開，系統就能在電源接點分離之前先知道 PSU 要被拔走。' },
+  { id: 'fx_kelvin', name: 'Kelvin 量測端子', en: 'Kelvin Sense Jacks · Vout+ / Vout−', tests: ['OUT-01', 'OUT-02', 'OUT-03', 'EFF-01', 'EFF-03'],
+    desc: '從插刀根部（最靠近 PSU 銅夾的地方）單獨拉兩條細線到香蕉端子，給電壓表量 Vout。這兩條線沒有大電流，量到的是 PSU 輸出端真正的電壓，不含治具銅排和接線柱的壓降。',
+    specs: [['接點', '插刀根部'], ['用途', 'Vout 設定點、調整率、效率計算的輸出電壓']],
+    tip: '85 A 流過 0.5 mΩ 就有 42 mV 壓降。電壓表若接在負載接線柱上，量到的 Vout 會偏低，負載調整率也會看起來超標。' },
+  { id: 'fx_ripple', name: '漣波量測 BNC', en: 'Ripple & Noise BNC · 0.1 µF + 10 µF', tests: ['OUT-04', 'OUT-05'],
+    desc: '在量測點並聯 0.1 µF 陶瓷電容和 10 µF 電容，再用 BNC 同軸線直接接示波器。不用探棒的接地夾，接地迴路最短，才不會把切換雜訊當成漣波。',
+    specs: [['電容', '0.1 µF X7R ∥ 10 µF'], ['示波器', '20 MHz 頻寬限制'], ['接線', '50 Ω 同軸線，越短越好']],
+    tip: '用 15 cm 的鱷魚夾接地量漣波，接地迴路就像一支天線，量到的雜訊可能比真實漣波大好幾倍。' },
+  { id: 'fx_shunt', name: '參考分流器', en: 'Reference Current Shunt · 150 A / 75 mV', tests: ['COM-02', 'EFF-01', 'OUT-11', 'PRT-01'],
+    desc: '精密分流器串在 52 V 路徑上，壓降接到功率分析儀，量出真正的輸出電流。用來和 PSU 回報的 READ_IOUT 比對，也用來計算效率。',
+    specs: [['規格', '150 A / 75 mV（0.5 mΩ），0.1% 精度'], ['材料', '錳銅，低溫度係數']],
+    tip: '分流器自己也會發熱（85 A 時約 3.6 W），溫度上升阻值會漂移；要求高精度時，等它熱穩定再讀。' },
+  { id: 'fx_caps', name: '可切換電容組', en: 'Switchable Bus Capacitor Bank', tests: ['OUT-15', 'OUT-05', 'OUT-12'],
+    desc: '用繼電器把 0 / 10,000 / 20,000 µF 的電容切到匯流排上，模擬機櫃匯流排和伺服器輸入端的大電容，做容性負載啟動、動態響應和熱插入測試。',
+    specs: [['電容量', '0 / 10,000 / 20,000 µF'], ['切換', '繼電器 K1 / K2'], ['耐壓', '80 V']],
+    tip: '規格常要求最大和最小匯流排電容都要測：電容大考驗啟動和熱插拔，電容小考驗動態響應的穩定度。' },
+  { id: 'fx_load', name: '負載接線柱', en: 'Load Studs → Electronic Load', tests: ['OUT-02', 'OUT-05', 'PRT-01', 'EFF-01'],
+    desc: 'M8 銅柱把治具銅排接到電子負載。正負兩條大電流線要並在一起走，迴路面積越小、電感越小，動態負載的電流才拉得夠快。',
+    specs: [['線材', '2 × 35 mm² 以上'], ['長度', '越短越好（< 1 m）']],
+    tip: '動態響應不好，有時不是 PSU 的錯：負載線太長或兩條分開走，線路電感讓 1 A/µs 的電流變化根本做不出來。' },
+  { id: 'fx_eload', name: '電子負載', en: 'Electronic Load · CC / CR / CP / Dynamic', tests: ['OUT-02', 'OUT-05', 'PRT-01', 'EFF-01', 'OUT-11'],
+    desc: '吸收 PSU 的輸出功率。可以設定定電流、定電阻、定功率、動態階躍和電流斜率，也能做 OCP 掃描。4.4 kW 通常要兩台以上並聯。',
+    specs: [['模式', 'CC、CR、CP、動態'], ['容量', '例：2 × 3 kW，≥ 120 A'], ['斜率', '≥ 1 A/µs']],
+    tip: '注意電子負載的最低工作電壓：短路或 UVP 測試時輸出電壓很低，負載可能進不了定電流模式，這時要改用短路開關。' },
+  { id: 'fx_short', name: '短路測試開關', en: 'Short-circuit Switch · MOSFET + Relay', tests: ['PRT-02'],
+    desc: '用低阻抗 MOSFET 和繼電器把 52 V 直接短到 RTN，由按鈕觸發、可控制短路時間，比拿電線去碰安全，也能重複。',
+    specs: [['短路阻抗', '< 5 mΩ'], ['觸發', '按鈕，或示波器同步訊號']],
+    tip: '短路測試要抓 PSU 電流峰值、ORing 關斷時間和恢復行為，都是微秒級的波形，要用同步訊號觸發示波器。' },
+  { id: 'fx_ext', name: '外部匯流排輸入', en: 'External Bus Supply Input', tests: ['OUT-12', 'OUT-14', 'PRT-07', 'SYS-03', 'SYS-04'],
+    desc: '接一台 52 V 直流電源（或其他 PSU、BBU）到治具匯流排，讓匯流排在 DUT 還沒開機時就有電，做熱插入、防逆流、倒灌和 BBU 系統測試。',
+    specs: [['輸入', '52 V，≥ 100 A'], ['保護', '串聯繼電器 + 保險絲']],
+    tip: '做防逆流測試時，在外部電源和匯流排之間串一個電流計：DUT 關機時這裡量到的就是倒灌電流。' },
+  { id: 'fx_ctrl', name: '控制面板', en: 'Control Panel · PS_ON / Status LEDs / Address DIP', tests: ['OUT-06', 'OUT-07', 'OUT-10', 'ATS-12', 'COM-05'],
+    desc: 'PS_ON 撥動開關控制遠端開關機；LED 顯示 PWOK、AC_OK、SMBAlert、PRESENT；DIP 開關設定 PMBus 位址（A0–A2）。',
+    specs: [['開關', 'PS_ON（拉低 = 開機）'], ['LED', 'PWOK、AC_OK、SMBAlert、PRESENT'], ['位址', 'A0–A2，對應 0x58–0x5F']],
+    tip: '同一條 PMBus 上的多台 PSU 靠位址腳區分。用 DIP 開關把 8 個位址都試一遍，確認每個位址都能正確回應。' },
+  { id: 'fx_usb', name: 'PMBus / CAN 轉接器', en: 'USB-to-PMBus / CAN Adapter', tests: ['COM-01', 'COM-02', 'COM-03', 'COM-04', 'COM-06', 'COM-07', 'COM-08', 'PRT-08'],
+    desc: '把電腦的 USB 轉成 PMBus（I²C）和 CAN，上位機軟體用它讀寫指令、記錄讀值、更新韌體。治具板上有 SDA / SCL 的上拉電阻和 CAN 終端電阻。',
+    specs: [['介面', 'PMBus 100 / 400 kHz；CAN 500 kbit/s'], ['上拉', 'SDA / SCL 各 2.2 kΩ 到 3.3 V'], ['CAN 終端', '120 Ω']],
+    tip: 'PMBus 讀不到時先查三件事：位址、上拉電阻、接地。轉接器和 PSU 沒有共地是最常見的原因。' },
+];
+const FIX = Object.fromEntries(FIX_DEFS.map(d => [d.id, d]));
+const partName = id => id.startsWith('fx:') ? FIX[id.slice(3)].name : DEF[id].name;
+const teFixOf = testId => FIX_DEFS.filter(d => d.tests.includes(testId)).map(d => d.id);
+let fixComps = {}, fixPick = [];
+function buildFixture() {
+  fixComps = {}; fixPick = [];
+  const prevG = G;
+  const B = (w, h, d, col, x, y, z, o) => put(BOX(w, h, d), col, o || {}, x, y, z);
+  const Cy = (r, h, col, x, y, z, o, rx = 0, rz = 0, seg = 20) => put(new THREE.CylinderGeometry(r, r, h, seg), col, o || {}, x, y, z, rx, 0, rz);
+  const tube = (pts, r, col, o) => put(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(...p))), 32, r, 8), col, o || { r: 0.5 }, 0, 0, 0);
+  const part = id => { const g = new THREE.Group(); teGroup.add(g); fixComps[id] = { id, group: g, meshes: [], hl: null }; G = g; };
+  // board: aluminium base, standoffs and a blue fixture PCB with silkscreen (x 17.2–25.9, z −4…4)
+  G = teGroup;
+  B(9.6, 0.25, 8.8, 0x8d949c, 21.7, 0.125, 0, METAL);
+  for (const [x, z] of [[17.6, -3.7], [25.5, -3.7], [17.6, 3.7], [25.5, 3.7]]) Cy(0.13, 0.7, C.alu, x, 0.6, z, METAL);
+  const PX = x => (x - 17.2) / 8.7 * 1024, PY = z => (z + 4) / 8 * 942;
+  const silk = canvasTex(1024, 942, (g, W, H) => {
+    g.fillStyle = '#163a6b'; g.fillRect(0, 0, W, H);
+    g.strokeStyle = 'rgba(255,255,255,.85)'; g.fillStyle = 'rgba(255,255,255,.9)'; g.lineWidth = 3;
+    g.font = '700 30px "JetBrains Mono", monospace'; g.fillText('PSU-4K4-52V TEST FIXTURE  REV A', 230, 48);
+    g.font = '600 22px "JetBrains Mono", monospace';
+    [['+52V', 18.6, -1.95], ['RTN', 18.6, 2.15], ['SHUNT 150A/75mV', 20.6, -1.85], ['LOAD+', 23.9, -1.75], ['LOAD-', 23.9, 2.0], ['CAP BANK  K1 K2', 19.0, 1.0],
+     ['Vout+  Vout-  KELVIN', 18.2, 3.95], ['RIPPLE', 20.3, 3.15], ['SHORT', 22.4, 3.95], ['EXT 52V IN', 24.3, 3.95], ['PS_ON', 19.3, -3.75], ['PWOK ACOK ALRT PRSNT', 20.1, -3.85],
+     ['PMBus', 22.0, -2.55], ['ADDR A0-A2', 23.2, -2.45], ['CAN', 24.4, -3.35], ['SIGNAL', 17.4, -1.7]].forEach(([t, x, z]) => g.fillText(t, PX(x), PY(z)));
+    g.setLineDash([12, 8]); g.strokeRect(PX(18.9), PY(-0.7), PX(22.6) - PX(18.9), PY(0.95) - PY(-0.7)); g.strokeRect(PX(21.8), PY(2.0), PX(23.9) - PX(21.8), PY(3.6) - PY(2.0)); g.setLineDash([]);
+    g.fillStyle = '#e5c02b'; g.fillRect(PX(24.0), PY(-0.55), 150, 60); g.fillStyle = '#111'; g.font = '700 20px "JetBrains Mono", monospace'; g.fillText('HIGH', PX(24.0) + 12, PY(-0.55) + 24); g.fillText('CURRENT', PX(24.0) + 12, PY(-0.55) + 48);
+  });
+  B(8.7, 0.1, 8, 0xffffff, 21.55, 1.0, 0, { r: 0.6, map: silk });
+  // busbar blades: thin in z so they slide between the PSU's clip plates (z = −1.1 / +1.3)
+  part('fx_bus');
+  for (const zc of [-1.1, 1.3]) {
+    B(2.6, 1.5, 0.22, C.copper, 16.9, 1.5, zc, COPPER);
+    B(0.7, 1.25, 0.9, C.copper, 18.55, 1.675, zc, COPPER);
+    B(zc < 0 ? 2.4 : 6.4, 0.24, 0.9, C.copper, zc < 0 ? 19.4 : 21.4, 1.17, zc, COPPER);
+    if (zc < 0) B(2.6, 0.24, 0.9, C.copper, 23.3, 1.17, zc, COPPER);
+  }
+  B(0.35, 1.5, 1.4, 0x22252a, 18.0, 1.8, 0.1, { r: 0.6 });
+  part('fx_shunt');
+  for (const x of [20.78, 21.82]) { B(0.36, 0.5, 0.9, 0xc9a24a, x, 1.3, -1.1, GOLD); Cy(0.06, 0.22, C.steel, x, 1.64, -0.8, METAL); }
+  for (let k = -1; k <= 1; k++) B(0.7, 0.34, 0.08, 0x9a8f86, 21.3, 1.25, -1.1 + k * 0.3, METAL);
+  part('fx_caps');
+  for (const z of [-0.25, 0.45]) for (const x of [19.2, 19.9, 20.6]) { Cy(0.3, 1.1, 0x1e2b4a, x, 1.6, z, { r: 0.45 }); Cy(0.29, 0.03, C.alu, x, 2.16, z, METAL); }
+  for (const x of [21.5, 22.2]) B(0.6, 0.45, 0.42, C.blue, x, 1.28, 0.15, { r: 0.4 });
+  part('fx_load');
+  for (const zc of [-1.1, 1.3]) { Cy(0.16, 0.95, C.gold, 24.3, 1.7, zc, GOLD); Cy(0.27, 0.16, C.steel, 24.3, 1.38, zc, METAL, 0, 0, 6); Cy(0.27, 0.16, C.steel, 24.3, 1.95, zc, METAL, 0, 0, 6); }
+  tube([[24.3, 2.05, -1.1], [25.3, 2.25, -0.45], [26.4, 1.75, -0.08], [27.42, 1.4, -0.16]], 0.16, 0xb3262d);
+  tube([[24.3, 2.05, 1.3], [25.3, 2.25, 0.65], [26.4, 1.75, 0.3], [27.42, 1.4, 0.16]], 0.16, 0x1a1b1e);
+  part('fx_eload');
+  B(2.6, 2.6, 4.4, 0x2b3038, 28.7, 1.3, 0, { r: 0.5, m: 0.3 });
+  const disp = canvasTex(512, 192, (g, W, H) => { g.fillStyle = '#071510'; g.fillRect(0, 0, W, H); g.fillStyle = '#5dff9a'; g.font = '700 60px "JetBrains Mono", monospace'; g.fillText('52.00 V', 24, 78); g.fillText('85.00 A', 24, 160); g.fillStyle = '#9fb0c2'; g.font = '600 22px "JetBrains Mono", monospace'; g.fillText('CC', 420, 40); });
+  B(1.7, 0.66, 0.03, 0xffffff, 28.25, 1.95, 2.215, { map: disp, e: 0x2a6a44, ei: 0.35 });
+  for (let i = 0; i < 4; i++) Cy(0.11, 0.08, 0x9aa6b2, 29.35 + (i % 2) * 0.42, 1.75 + Math.floor(i / 2) * 0.42, 2.24, METAL, Math.PI / 2);
+  for (const z of [-0.16, 0.16]) Cy(0.11, 0.2, z < 0 ? C.red : C.black, 27.37, 1.4, z, {}, 0, Math.PI / 2);
+  for (let i = 0; i < 6; i++) B(0.03, 0.05, 2.8, 0x1b1f24, 29.99, 0.6 + i * 0.2, 0);
+  part('fx_kelvin');
+  for (const [z, col] of [[2.7, C.red], [3.35, C.black]]) { Cy(0.17, 0.42, col, 19.3, 1.26, z, { r: 0.4 }); Cy(0.09, 0.14, C.gold, 19.3, 1.52, z, GOLD); }
+  tube([[18.45, 1.42, -1.1], [18.85, 1.75, -0.3], [19.05, 1.55, 1.9], [19.3, 1.5, 2.7]], 0.035, 0xffd166);
+  tube([[18.45, 1.42, 1.3], [18.95, 1.55, 2.2], [19.3, 1.5, 3.35]], 0.035, 0xe6edf3);
+  part('fx_ripple');
+  Cy(0.16, 0.55, C.steel, 20.6, 1.3, 3.85, METAL, Math.PI / 2); Cy(0.21, 0.1, C.steel, 20.6, 1.3, 4.05, METAL, Math.PI / 2);
+  B(0.16, 0.1, 0.26, 0xc9a24a, 20.25, 1.1, 3.35); B(0.32, 0.26, 0.36, 0x23262b, 20.95, 1.18, 3.35);
+  tube([[20.6, 1.3, 4.1], [20.75, 1.0, 4.9], [21.2, 0.3, 5.6]], 0.07, 0x30343a);
+  part('fx_short');
+  B(1.0, 0.6, 0.9, C.alu, 23.2, 1.35, 2.85, METAL);
+  for (let i = 0; i < 5; i++) B(0.06, 0.5, 0.9, C.alu, 22.78 + i * 0.21, 1.9, 2.85, METAL);
+  B(0.45, 0.6, 0.1, C.black, 23.2, 1.55, 2.33);
+  B(0.5, 0.25, 0.5, C.black, 22.25, 1.17, 3.5); Cy(0.17, 0.22, 0xd23b3b, 22.25, 1.4, 3.5, { r: 0.35 });
+  B(0.6, 0.45, 0.42, C.blue, 22.3, 1.28, 2.55, { r: 0.4 });
+  part('fx_ext');
+  for (const [z, col] of [[2.6, C.red], [3.4, C.black]]) { Cy(0.2, 0.55, col, 25.25, 1.33, z, { r: 0.4 }); Cy(0.12, 0.2, C.gold, 25.25, 1.7, z, GOLD); }
+  B(0.8, 0.3, 0.32, C.black, 24.45, 1.2, 3.05); B(0.6, 0.45, 0.42, C.blue, 24.45, 1.28, 2.4, { r: 0.4 });
+  part('fx_sig');
+  B(0.7, 0.9, 1.2, 0x1b1c1f, 16.95, 1.45, -2.6, { r: 0.55 });
+  B(1.6, 0.03, 0.6, 0x9aa6b2, 18.1, 1.065, -2.6, { r: 0.5 });
+  part('fx_ctrl');
+  B(0.4, 0.25, 0.3, C.black, 19.6, 1.18, -3.3); Cy(0.04, 0.38, C.steel, 19.6, 1.48, -3.25, METAL, 0.35);
+  [0x2bd66a, 0x2bd66a, 0xffb547, 0x3d8bff].forEach((c, i) => put(SPH(0.09), c, { e: c, ei: 1.4 }, 20.4 + i * 0.42, 1.12, -3.6));
+  B(0.85, 0.15, 0.36, C.red, 23.6, 1.13, -2.85);
+  for (let i = 0; i < 3; i++) B(0.12, 0.06, 0.14, 0xffffff, 23.35 + i * 0.25, 1.23, -2.9 + (i === 1 ? 0.06 : -0.04));
+  part('fx_usb');
+  B(1.0, 0.36, 0.6, 0x23395b, 22.4, 1.23, -3.2, { r: 0.45, m: 0.3 }); B(0.6, 0.25, 0.15, C.black, 22.4, 1.18, -2.75);
+  tube([[22.9, 1.23, -3.2], [24.3, 1.1, -4.3], [26.2, 0.35, -5.3]], 0.06, 0x30343a);
+  B(0.9, 0.36, 0.3, C.steel, 24.6, 1.23, -3.85, METAL); B(0.6, 0.2, 0.05, C.black, 24.6, 1.23, -4.01);
+  // pickable meshes + labels
+  for (const id in fixComps) {
+    const fc = fixComps[id];
+    fc.group.traverse(o => { if (o.isMesh) { o.userData.comp = 'fx:' + id; o.userData.baseE = o.material.emissive.clone(); o.userData.baseI = o.material.emissiveIntensity; fc.meshes.push(o); fixPick.push(o); } });
+    const b = new THREE.Box3().setFromObject(fc.group);
+    fc.label = css2d('lbl', `<i style="background:#ffb547"></i>${FIX[id].name}`, new THREE.Vector3((b.min.x + b.max.x) / 2, b.max.y + 0.35, (b.min.z + b.max.z) / 2), teGroup);
+  }
+  G = prevG;
+}
+function updateFixHL() {
+  if (mode !== 'test') { for (const id in fixComps) fixComps[id].label.visible = false; return; }
+  const pulse = 0.5 + 0.5 * Math.sin(time * 5), used = tst.sel && tst.view !== 'fixall' ? teFixOf(tst.sel) : [];
+  for (const id in fixComps) {
+    const fc = fixComps[id], key = 'fx:' + id;
+    let k = 0;
+    if (tst.part === key || (tst.view === 'fix' && tst.fix === id)) k = 0.2 + 0.25 * pulse;
+    else if (used.includes(id)) k = 0.12 + 0.16 * pulse;
+    else if (hoverId === key) k = 0.28;
+    fc.label.visible = labelMode > 0 || tst.view === 'fixall' || tst.part === key || (tst.view === 'fix' && tst.fix === id);
+    if (!k && !fc.hl) continue;
+    for (const m of fc.meshes) {
+      if (k) { m.material.emissive.set('#ffb547'); m.material.emissiveIntensity = k; }
+      else { m.material.emissive.copy(m.userData.baseE); m.material.emissiveIntensity = m.userData.baseI; }
+    }
+    fc.hl = !!k;
+  }
+}
 
 /* plot builders: each returns a description the scope draws ('lanes' = time traces) */
 const SIN = (t, f = 50, ph = 0) => Math.sin(TAU * f * t + ph);
@@ -3047,7 +3222,7 @@ const TE_ITEMS_52 = [
   TI('ATS-12', 'ATS Status Reporting', 'ATS 狀態回報', '每次切換後讀 PMBus 狀態與事件紀錄', '使用中的 Feed、事件次數正確', ['ats', 'dsp_sec'], ['sig'],
     () => CK('回報正確', [['使用中的 Feed：讀值和實際一致', true], ['切換事件計數：每次 +1', true], ['SMBAlert 在切換時拉低', true]])),
 
-  TI('EFF-01', 'Efficiency Curve', '效率曲線', '230 Vac，10–100% 每 10% 一點', '例：Titanium（230 V 內部冗餘）10% ≥ 90%、20% ≥ 94%、50% ≥ 96%、100% ≥ 91%', ['pfc_sw', 'llc_sw', 'resonant', 'sr', 'connector'], ['acA', 'vout', 'load'],
+  TI('EFF-01', 'Efficiency Curve', '效率曲線', '230 Vac，10–100% 每 10% 一點', '例：Titanium（230 V 內部冗餘）10% ≥ 90%、20% ≥ 94%、50% ≥ 96%、100% ≥ 91%', ['pfc_sw', 'llc_sw', 'resonant', 'sr', 'connector'], ['acA', 'vout', 'fxshunt'],
     (D, j) => { const L = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100], base = [92.1, 95.2, 96.3, 96.8, 97.0, 96.9, 96.7, 96.4, 96.0, 95.6];
       const ys = base.map((v, i) => v + j(0.06, 'e' + i) - (D.has('llc') ? 0.6 + L[i] / 100 * 1.2 : 0));
       const ref = [[10, 90], [20, 94], [50, 96], [100, 91]], pass = ref.every(([x, y]) => ys[L.indexOf(x)] >= y);
@@ -3060,14 +3235,16 @@ const TE_ITEMS_52 = [
     (D, j) => { const v = (D.has('fan') ? 0.84 : 0.32) + j(0.04); return RES(`100% 負載掉 ${fx(v, 2)}%`, v <= 0.5, meter(v, '%', null, 0.5, 0, 1.2, 2), '高溫時風扇轉快、零件導通電阻變大，效率會掉一點。'); }),
 
   TI('OUT-01', 'Output Voltage Set Point', '輸出設定點', '230 Vac，50% 負載', '例：52.0 V ± 0.5%', ['dsp_sec', 'connector'], ['vout'],
-    (D, j) => { const v = 52.02 + j(0.03); return RES(`${fx(v, 3)} V`, v >= 51.74 && v <= 52.26, meter(v, 'V', 51.74, 52.26, 51.5, 52.5, 3)); }),
+    (D, j) => { const v = 52.02 + j(0.03) - (D.has('fxsense') ? 0.42 : 0); return RES(`${fx(v, 3)} V`, v >= 51.74 && v <= 52.26, meter(v, 'V', 51.74, 52.26, 51.4, 52.5, 3)); }),
   TI('OUT-02', 'Load Regulation', '負載調整率', '0–100% 負載', '例：± 1%，或符合下垂斜率', ['dsp_sec'], ['vout', 'load'],
-    (D, j) => { const v = -0.46 + j(0.04); return RES(`${fx(v, 2)}%（下垂）`, Math.abs(v) <= 1, meter(v, '%', -1, 1, -1.5, 1.5, 2), '下垂均流：滿載時故意讓電壓低一點，多台並聯就會自然分流。'); }),
+    (D, j) => { const v = -0.46 + j(0.04) - (D.has('fxsense') ? 0.85 : 0); return RES(`${fx(v, 2)}%（下垂）`, Math.abs(v) <= 1, meter(v, '%', -1, 1, -1.6, 1.6, 2), '下垂均流：滿載時故意讓電壓低一點，多台並聯就會自然分流。'); }),
   TI('OUT-03', 'Line Regulation', '線調整率', '200–277 Vac，50% 負載', '例：± 0.5%', ['dsp_sec'], ['acA', 'vout'],
     (D, j) => { const v = 0.03 + j(0.02); return RES(`${fx(v, 2)}%`, Math.abs(v) <= 0.5, meter(v, '%', -0.5, 0.5, -0.8, 0.8, 2)); }),
-  TI('OUT-04', 'Ripple & Noise', '漣波與雜訊', '20 MHz 頻寬，10 / 50 / 100% 負載 × 3 個輸入電壓', '例：≤ 1% Vout p-p（520 mV）', ['outcap', 'sr', 'llc_sw'], ['vout'],
-    (D, j) => { const v = (D.has('esr') ? 640 : 168) + j(15); return RES(`${fx(v, 0)} mVp-p`, v <= 520, wRipple(v, 520)); }),
-  TI('OUT-05', 'Dynamic Load Response', '動態響應', '50% ↔ 100% 階躍，slew 1 A/µs', '例：偏差 ≤ ± 5%（2.6 V）、恢復 ≤ 1 ms', ['outcap', 'dsp_sec', 'llc_sw'], ['vout', 'load'],
+  TI('OUT-04', 'Ripple & Noise', '漣波與雜訊', '20 MHz 頻寬，10 / 50 / 100% 負載 × 3 個輸入電壓', '例：≤ 1% Vout p-p（520 mV）', ['outcap', 'sr', 'llc_sw'], ['ripple'],
+    (D, j) => { const g = D.has('fxgnd'), v = (D.has('esr') ? 640 : 168) + j(15) + (g ? 740 : 0); const w = wRipple(v, 520);
+      if (g) { const f = w.lanes[0].f; w.lanes[0].f = x => f(x) * 0.35 + v * 0.42 * Math.sin(x * 470) * Math.exp(-frac(x * 8) * 6); }
+      return RES(`${fx(v, 0)} mVp-p`, v <= 520, w, g ? '波形上疊了很多高頻振鈴，看起來不太像 PSU 的漣波。' : ''); }),
+  TI('OUT-05', 'Dynamic Load Response', '動態響應', '50% ↔ 100% 階躍，slew 1 A/µs', '例：偏差 ≤ ± 5%（2.6 V）、恢復 ≤ 1 ms', ['outcap', 'dsp_sec', 'llc_sw'], ['ripple', 'load', 'capbank'],
     (D, j) => { const us = (D.has('esr') ? 3.15 : 1.42) + j(0.08), rec = (D.has('esr') ? 0.62 : 0.34) + j(0.02, 'r');
       return RES(`跌落 ${fx(us, 2)} V · 恢復 ${fx(rec, 2)} ms`, us <= 2.6 && rec <= 1, wDyn(us, rec, 2.6)); }),
   TI('OUT-06', 'Turn-on Timing', '開機時序', 'AC 上電到 Vout 建立', '延遲與上升時間在規格內，單調上升，過衝例 ≤ 5%', ['dsp_sec', 'oring'], ['acA', 'vout', 'sig'],
@@ -3087,16 +3264,16 @@ const TE_ITEMS_52 = [
     (D, j) => { const pk = D.has('oring') ? 86 + j(3) : 11.5 + j(1), dip = D.has('oring') ? 3.4 : 0.5; return RES(`湧入 ${fx(pk)} A · 匯流排跌 ${fx(dip)} V`, pk <= 20 && dip <= 2.6, wHotplug(pk, dip, false)); }),
   TI('OUT-13', 'Hot Removal', '熱拔除', '滿載中拔出一台', '其他 PSU 接手，匯流排不掉出規格', ['oring', 'connector'], ['bus', 'psu2'],
     (D, j) => { const dip = 1.1 + j(0.1); return RES(`匯流排跌 ${fx(dip)} V`, dip <= 2.6, wHotplug(0, dip, true)); }),
-  TI('OUT-14', 'Reverse Current Blocking, ORing', '防逆流', 'DUT 關機，匯流排由其他電源維持', '逆向電流例 ≤ 0.5 A', ['oring'], ['oring', 'bus'],
+  TI('OUT-14', 'Reverse Current Blocking, ORing', '防逆流', 'DUT 關機，匯流排由其他電源維持', '逆向電流例 ≤ 0.5 A', ['oring'], ['oring', 'ext'],
     (D, j) => { const v = D.has('oring') ? 18.4 + j(0.5) : 0.02; return RES(`${fx(v, 2)} A 逆流`, v <= 0.5, meter(v, 'A', null, 0.5, 0, 20, 2)); }),
-  TI('OUT-15', 'Capacitive Load Start-up', '容性負載啟動', '匯流排接最大允許電容（例 20,000 µF）', '正常啟動、不觸發 OCP', ['oring', 'dsp_sec'], ['vout', 'load'],
+  TI('OUT-15', 'Capacitive Load Start-up', '容性負載啟動', '匯流排接最大允許電容（例 20,000 µF）', '正常啟動、不觸發 OCP', ['oring', 'dsp_sec'], ['capbank', 'vout'],
     () => CK('正常啟動', [['20,000 µF：Vout 上升 46 ms，單調', true], ['沒有觸發 OCP、沒有 hiccup', true]])),
   TI('OUT-16', 'Output Derating Curve', '降額曲線', '依輸入電壓與環境溫度', '輸出功率符合曲線', ['dsp_sec', 'fan'], ['load', 'fan'],
     (D, j) => { const xs = DERATE.map(p => p[0]), ys = DERATE.map((p, i) => p[1] + 10 + j(6, 'd' + i)); return RES('符合降額曲線', true, { k: 'curve', xs, ys, ref: DERATE, refName: '規格曲線', xr: [20, 60], yr: [3000, 4700], xl: '環境溫度 °C', yl: '最大輸出 W', fail: () => false }); }),
 
   TI('PRT-01', 'Over-current Protection, OCP', '過電流', '負載以 1 A/s 增加到保護', '例：動作點 110–130% 額定；hiccup 行為符合規格', ['shunt', 'dsp_sec'], ['load', 'shunt', 'vout'],
     (D, j) => { const p = D.has('shunt') ? 108.2 : 118 + j(1); return RES(`${fx(p)}%（${fx(85 * p / 100)} A）`, p >= 110 && p <= 130, wProt({ sn: 'Iout', su: 'A', a: 80, b: 115, trip: 85 * p / 100, lo: 93.5, hi: 110.5, mode: 'hiccup', after: 'pulse', c: '#5ad1ff', tdiv: '4 s/div' }), '110% = 93.5 A，130% = 110.5 A。'); }),
-  TI('PRT-02', 'Short-circuit Protection, SCP', '輸出短路', '空載與滿載下短路，再移除', '無損壞；移除後依規格恢復', ['oring', 'dsp_sec', 'outcap'], ['vout', 'oring'],
+  TI('PRT-02', 'Short-circuit Protection, SCP', '輸出短路', '空載與滿載下短路，再移除', '無損壞；移除後依規格恢復', ['oring', 'dsp_sec', 'outcap'], ['short', 'oring'],
     () => CK('保護正常', [['空載短路：hiccup，峰值 142 A / 200 µs', true], ['滿載短路：ORing 在 5 µs 內關斷', true], ['移除短路：自動恢復', true], ['外觀與溫度正常', true]])),
   TI('PRT-03', 'Over-voltage Protection, OVP', '過電壓', '以工程指令抬高回授', '例：55–58 V，且 < 60 V（SELV）', ['dsp_sec'], ['vout', 'sig'],
     (D, j) => { const v = 56.6 + j(0.25); return RES(`${fx(v, 2)} V 鎖住`, v >= 55 && v <= 58, wProt({ sn: 'Vout', su: 'V', a: 52, b: 59, trip: v, lo: 55, hi: 58, mode: 'pwok', after: 'decay', c: '#2fd4b5', dec: 2, tdiv: '20 ms/div' })); }),
@@ -3106,7 +3283,7 @@ const TE_ITEMS_52 = [
     (D, j) => { const v = 118 + j(1.5); return RES(`熱點 ${fx(v)} °C 關機`, v >= 110 && v <= 125, wProt({ sn: '熱點溫度（PFC 散熱片）', su: '°C', a: 85, b: 130, trip: v, lo: 110, hi: 125, mode: 'latch', after: 'cool', tdiv: '2 min/div' }), '降到約 100 °C 後自動恢復，記錄觸發溫度。'); }),
   TI('PRT-06', 'Fan Failure Protection', '風扇失效', '卡住風扇或斷線', '告警、降額或關機（依規格）', ['fan', 'dsp_sec'], ['fan', 'sig'],
     D => CK(OKF('保護正常', '轉速異常沒有告警'), [['風扇堵轉：2 s 內發出 FAN_FAULT，降額到 50%', true], [D.has('fan') ? '轉速只有命令值的 74%，但沒有發出 FAN_WARNING' : '轉速比命令值低 20% 時發出 FAN_WARNING', !D.has('fan')]])),
-  TI('PRT-07', 'Bus Back-feed Protection', '匯流排倒灌', 'DUT 未開機，匯流排外加 52 V', '無損壞、無逆流', ['oring'], ['bus', 'oring'],
+  TI('PRT-07', 'Bus Back-feed Protection', '匯流排倒灌', 'DUT 未開機，匯流排外加 52 V', '無損壞、無逆流', ['oring'], ['ext', 'oring'],
     D => CK(OKF('無逆流', '倒灌 18 A'), [[D.has('oring') ? '外加 52 V：逆流 18 A 流進 DUT 輸出電容' : '外加 52 V：逆流 < 10 mA', !D.has('oring')], ['DUT 無損壞', true]])),
   TI('PRT-08', 'Protection Status Reporting', '保護狀態回報', '每個保護動作後讀 STATUS_WORD 與子狀態', '旗標正確、可清除', ['dsp_sec'], ['sig'],
     () => CK('旗標正確', [['OCP → STATUS_IOUT bit 7', true], ['OVP → STATUS_VOUT bit 7', true], ['OTP → STATUS_TEMPERATURE bit 7', true], ['CLEAR_FAULTS 後旗標清除', true]])),
@@ -3133,7 +3310,7 @@ const TE_ITEMS_52 = [
 
   TI('COM-01', 'PMBus Command Compliance', 'PMBus 指令相容性', '規格列出的每個指令逐一讀 / 寫', '回應正確；不支援的指令依規格回應', ['dsp_sec'], ['sig'],
     () => CK('相容', [['46 個指令逐一讀寫：回應正確', true], ['不支援的指令：NACK，STATUS_CML 設定', true]])),
-  TI('COM-02', 'Telemetry Accuracy', '讀值精度', 'READ_VIN / IIN / PIN / VOUT / IOUT / POUT，多個負載點與功率分析儀比對', '例：電壓 ± 1%、電流與功率 ± 2%', ['dsp_sec', 'shunt', 'dsp_pri'], ['sig', 'shunt', 'acA'],
+  TI('COM-02', 'Telemetry Accuracy', '讀值精度', 'READ_VIN / IIN / PIN / VOUT / IOUT / POUT，多個負載點與功率分析儀比對', '例：電壓 ± 1%、電流與功率 ± 2%', ['dsp_sec', 'shunt', 'dsp_pri'], ['sig', 'fxshunt', 'acA'],
     (D, j) => { const s = D.has('shunt') ? 9 : 0; const rows = [['READ_VIN', Math.abs(0.4 + j(0.1, 'a')), 1, '%'], ['READ_IIN', Math.abs(1.1 + j(0.2, 'b')), 2, '%'], ['READ_PIN', Math.abs(1.3 + j(0.2, 'c')), 2, '%'], ['READ_VOUT', Math.abs(0.2 + j(0.05, 'd')), 1, '%'], ['READ_IOUT', Math.abs(1.2 + s + j(0.2, 'e')), 2, '%'], ['READ_POUT', Math.abs(1.4 + s + j(0.2, 'f')), 2, '%']];
       return RES(s ? 'IOUT / POUT 偏高約 10%' : '全部在誤差內', rows.every(r => r[1] <= r[2]), { k: 'bars', rows, tdiv: '|誤差| / 上限（50% 負載）' }); }),
   TI('COM-03', 'PEC & Error Handling', 'PEC 與錯誤處理', '送錯誤 PEC、不存在的指令', 'NACK，STATUS_CML 正確設定', ['dsp_sec'], ['sig'],
@@ -3222,7 +3399,7 @@ function teRand(seed, key) { return (teHash(key, seed) % 20001) / 10000 - 1; }
 function teSample(k = tst.cur) { return TE_SAMPLES.find(s => s.k === k); }
 function teNewS(k) {
   const smp = teSample(k);
-  const d = smp.d ? smp.d.slice() : Object.keys(TE_DEFECTS).sort(() => Math.random() - 0.5).slice(0, Math.random() < 0.5 ? 2 : 3);
+  const d = smp.d ? smp.d.slice() : Object.keys(TE_DEFECTS).filter(k => !TE_DEFECTS[k].fixture).sort(() => Math.random() - 0.5).slice(0, Math.random() < 0.5 ? 2 : 3);
   return { d, seed: k === 'blind' ? (Math.random() * 4e9) >>> 0 : teHash(k), res: {}, found: [], fixed: [], score: 0, tries: {}, revealed: false, bonus: false };
 }
 function teS(k = tst.cur) { return tst.S[k] || (tst.S[k] = teNewS(k)); }
@@ -3301,10 +3478,15 @@ function teSelect(id, fly = true) {
 function teClickPart(id) {
   if (tst.diag) { teDiagnose(id); return; }
   tst.part = id;
-  const n = TE.items.filter(it => it.parts.includes(id)).length;
-  flashes[id] = { color: new THREE.Color(ZONES[DEF[id].zone].color), until: time + 0.9 };
+  const n = teList().length;
+  if (id.startsWith('fx:')) { tst.view = 'fix'; tst.fix = id.slice(3); renderTestInfo(); }
+  else flashes[id] = { color: new THREE.Color(ZONES[DEF[id].zone].color), until: time + 0.9 };
   renderPanel(); openPanelSheet();
-  toast(n ? `${DEF[id].name}：左邊列出 ${n} 個相關測項` : `${DEF[id].name}：測試計畫裡沒有直接量它的測項`);
+  toast(n ? `${partName(id)}：清單列出 ${n} 個相關測項` : `${partName(id)}：測試計畫裡沒有直接量它的測項`);
+}
+function teFixOverview() {
+  tst.view = 'fixall'; tst.part = null; renderTestInfo(); renderPanel();
+  focusPoint(new THREE.Vector3(22.2, 1.2, 0), 15);
 }
 function teDiagnose(part) {
   const id = tst.diag, S = teS(); if (!id) return;
@@ -3313,12 +3495,12 @@ function teDiagnose(part) {
     const tries = S.tries[id] || 0, pts = tries === 0 ? 30 : tries === 1 ? 15 : 5;
     const fresh = hit.filter(d => !S.found.includes(d)); fresh.forEach(d => S.found.push(d));
     const gain = S.revealed ? 0 : pts * fresh.length; S.score += gain;
-    flashes[part] = { color: new THREE.Color('#3ddc84'), until: time + 1.6 };
+    if (!part.startsWith('fx:')) flashes[part] = { color: new THREE.Color('#3ddc84'), until: time + 1.6 };
     tst.msg = { id, ok: true, ds: hit, gain }; tst.diag = null;
     if (S.d.every(d => S.found.includes(d)) && fresh.length) setTimeout(() => toast(`這台樣品的 ${S.d.length} 個問題都找到了！換料後重測，全部 PASS 就能放行`, 4500), 400);
   } else {
     S.tries[id] = (S.tries[id] || 0) + 1;
-    flashes[part] = { color: new THREE.Color('#ff4d5e'), until: time + 1.2 };
+    if (!part.startsWith('fx:')) flashes[part] = { color: new THREE.Color('#ff4d5e'), until: time + 1.2 };
     tst.msg = { id, ok: false, part, hint: causes.length ? TE_DEFECTS[causes[0]].hint : '' };
   }
   teSave(); renderTestInfo(); renderPanel(); applyLabels();
@@ -3331,7 +3513,8 @@ function teFix(ds) {
   stale.forEach(id => delete S.res[id]);
   const n = stale.length;
   tst.msg = null; tst.diag = null; teSave();
-  toast(`已更換：${[...new Set(ds.flatMap(d => TE_DEFECTS[d].parts.slice(0, 1)))].map(p => DEF[p].name).join('、')}。${n} 個 FAIL 的測項要重測`, 4200);
+  const fxOnly = ds.every(d => TE_DEFECTS[d].fixture);
+  toast(`${fxOnly ? '已重新接好' : '已更換'}：${[...new Set(ds.map(d => TE_DEFECTS[d].parts[0]))].map(partName).join('、')}。${n} 個 FAIL 的測項要重測`, 4200);
   renderTestInfo(); renderPanel(); updateScopeHead();
 }
 function teShowProbes(keys) {
@@ -3339,7 +3522,11 @@ function teShowProbes(keys) {
 }
 
 /* ---------- TE bench: panel & card ---------- */
-function teList() { return tst.part ? TE.items.filter(it => it.parts.includes(tst.part)) : TE.items.filter(it => it.cat === tst.cat); }
+function teList() {
+  if (!tst.part) return TE.items.filter(it => it.cat === tst.cat);
+  if (tst.part.startsWith('fx:')) return FIX[tst.part.slice(3)].tests.map(id => TE.byId[id]);
+  return TE.items.filter(it => it.parts.includes(tst.part));
+}
 function teBadge(S, id) {
   if (tst.run && tst.run.id === id && tst.run.k === tst.cur) return '<em class="res run">…</em>';
   const r = S.res[id]; if (!r) return '<em class="res">–</em>';
@@ -3355,7 +3542,7 @@ function testPanelHTML() {
     return `<button data-cat="${c}" class="${!tst.part && tst.cat === c ? 'on' : ''}" style="--cc:${TE_CATS[c].c}"><b>${c}</b><i>${dn}/${ci.length}</i>${f ? '<span class="fdot"></span>' : ''}</button>`;
   }).join('');
   const head = tst.part
-    ? `<p class="note">和 <b>${DEF[tst.part].name}</b> 有關的測項（${list.length} 個） <button class="linkb" id="tPartX">清除篩選</button></p>`
+    ? `<p class="note">${tst.part.startsWith('fx:') ? '用到治具' : '和'} <b>${partName(tst.part)}</b> ${tst.part.startsWith('fx:') ? '的' : '有關的'}測項（${list.length} 個） <button class="linkb" id="tPartX">清除篩選</button></p>`
     : `<p class="chain-t">${TE_CATS[tst.cat].n} · ${TE_CATS[tst.cat].en}</p>`;
   return `<div><h3>TE 測試台</h3><p class="lead">照測試計畫量測這台 4.4 kW / 52 V PSU。選一台樣品，執行測項；遇到 FAIL 就在 3D 模型上點出造成問題的零件，換料後重測。</p></div>
     <label class="field"><span>DUT 樣品</span><select id="tSample">${TE_SAMPLES.map(s => `<option value="${s.k}" ${s.k === tst.cur ? 'selected' : ''}>${s.n}</option>`).join('')}</select></label>
@@ -3365,6 +3552,7 @@ function testPanelHTML() {
       <div><dt>PASS</dt><dd class="good">${done.length - fails.length}</dd></div><div><dt>FAIL</dt><dd class="${fails.length ? 'badc' : ''}">${fails.length}</dd></div>
       <div><dt>找到的問題</dt><dd>${S.found.length} / ${blindHide ? '?' : S.d.length}</dd></div><div><dt>分數</dt><dd class="warn">${S.score}</dd></div>
     </dl>
+    <button class="btn ${tst.view === 'fixall' ? 'primary' : ''}" id="tFixAll">認識測試治具板（${FIX_DEFS.length} 個元件）</button>
     <div class="chips">${chips}</div>
     ${head}
     <ul class="tlist">${list.map(it => `<li><button data-test="${it.id}" class="${tst.sel === it.id ? 'on' : ''}"><span class="tid">${it.id}</span><span><b>${it.en}</b><small>${it.zh}</small></span>${teBadge(S, it.id)}</button></li>`).join('')}</ul>
@@ -3383,15 +3571,16 @@ function testInfoHTML() {
       const causes = teCauses(it.id), m = tst.msg && tst.msg.id === it.id ? tst.msg : null;
       const known = causes.filter(d => S.found.includes(d));
       if (m && m.ok) diag = `<div class="fb ok"><b>找到了：${m.ds.map(d => TE_DEFECTS[d].n).join('、')}${m.gain ? `（+${m.gain} 分）` : ''}</b>${m.ds.map(d => TE_DEFECTS[d].ex).join('<br>')}</div>`;
-      else if (m && !m.ok) diag = `<div class="fb no"><b>不是「${DEF[m.part].name}」</b>${m.hint ? `提示：${m.hint}` : ''}</div>`;
-      if (known.length && known.length === causes.length) diag += `${m && m.ok ? '' : `<div class="fb ok"><b>原因已找到</b>${known.map(d => TE_DEFECTS[d].n).join('、')}</div>`}<button class="btn primary" id="tFix" data-d="${known.join(',')}">更換零件，準備重測</button>`;
-      else diag += `<button class="btn primary ${tst.diag === it.id ? 'armed' : ''}" id="tDiag">${tst.diag === it.id ? '在 3D 模型上點出原因零件…（再按一次取消）' : '找出故障零件'}</button>`;
+      else if (m && !m.ok) diag = `<div class="fb no"><b>不是「${partName(m.part)}」</b>${m.hint ? `提示：${m.hint}` : ''}</div>`;
+      if (known.length && known.length === causes.length) diag += `${m && m.ok ? '' : `<div class="fb ok"><b>原因已找到</b>${known.map(d => TE_DEFECTS[d].n).join('、')}</div>`}<button class="btn primary" id="tFix" data-d="${known.join(',')}">${known.every(d => TE_DEFECTS[d].fixture) ? '重新接好治具，準備重測' : '更換零件，準備重測'}</button>`;
+      else diag += `<button class="btn primary ${tst.diag === it.id ? 'armed' : ''}" id="tDiag">${tst.diag === it.id ? '在 3D 模型上點出原因（PSU 零件或治具元件）…再按一次取消' : '找出故障原因'}</button>`;
     }
   }
   return `<div class="ih"><span class="pill" style="background:${C.c}">${it.cat} · ${C.n}</span><button class="x" id="infoClose" aria-label="關閉">×</button></div>
     <div><h2>${it.en}</h2><p class="en">${it.id} · ${it.zh}</p></div>
     <dl class="specs"><dt>測試條件</dt><dd>${it.cond}</dd><dt>判定（參考）</dt><dd>${it.lim}</dd><dt>儀器</dt><dd>${C.eq}</dd>
-      <dt>量測點</dt><dd>${it.pr.map(k => TE_PROBES[k][0]).join('、')}</dd><dt>相關零件</dt><dd>${it.parts.map(p => DEF[p].name).join('、')}</dd></dl>
+      <dt>量測點</dt><dd>${it.pr.map(k => TE_PROBES[k][0]).join('、')}</dd><dt>相關零件</dt><dd>${it.parts.map(p => DEF[p].name).join('、')}</dd>
+      ${teFixOf(it.id).length ? `<dt>治具</dt><dd>${teFixOf(it.id).map(f => `<button class="linkb" data-fix="${f}">${FIX[f].name}</button>`).join('、')}</dd>` : ''}</dl>
     <div class="tipbox"><b>量測要點</b>${it.tip || C.tip}</div>
     <button class="btn ${r ? '' : 'primary'}" id="tRun" ${running || tst.run ? 'disabled' : ''}>${r ? '↻ 重新量測' : '▶ 執行測試'}</button>
     ${res}${diag}
@@ -3407,7 +3596,7 @@ function testReportHTML() {
   const S = teS(), smp = teSample();
   const cats = Object.keys(TE_CATS).map(c => { const ci = TE.items.filter(it => it.cat === c), dn = ci.filter(it => S.res[it.id]), f = dn.filter(it => !S.res[it.id].pass); return `<tr><td class="mono">${c}</td><td>${TE_CATS[c].n}</td><td class="mono">${dn.length} / ${ci.length}</td><td class="mono ${f.length ? 'badc' : dn.length === ci.length ? 'good' : ''}">${f.length ? f.length + ' FAIL' : dn.length === ci.length ? 'PASS' : '–'}</td></tr>`; }).join('');
   const fails = TE.items.filter(it => S.res[it.id] && !S.res[it.id].pass);
-  const ans = S.revealed ? `<div class="fb no"><b>答案：這台的問題</b>${S.d.map(d => `${S.found.includes(d) ? '✓' : '✗'} ${TE_DEFECTS[d].n}（${DEF[TE_DEFECTS[d].parts[0]].name}）`).join('<br>')}</div>` : '';
+  const ans = S.revealed ? `<div class="fb no"><b>答案：這台的問題</b>${S.d.map(d => `${S.found.includes(d) ? '✓' : '✗'} ${TE_DEFECTS[d].n}（${partName(TE_DEFECTS[d].parts[0])}）`).join('<br>')}</div>` : '';
   return `<div class="ih"><span class="pill" style="background:#5aa9ff">測試報告</span><button class="x" id="infoClose" aria-label="關閉">×</button></div>
     <div><h2>${smp.n}</h2><p class="en">4.4 kW / 52 V PSU · DVT test report</p></div>
     ${ans}
@@ -3416,9 +3605,28 @@ function testReportHTML() {
     <div class="scn"><button class="btn primary" id="tDl">下載 CSV</button><button class="btn" id="tCopy">複製 CSV</button></div>
     <p class="note">CSV 包含 ID、Test Item、測項、條件、判定、量測值與結果，可以直接貼到 Excel。</p>`;
 }
+function fixInfoHTML(id) {
+  const d = FIX[id];
+  return `<div class="ih"><span class="pill" style="background:#ffb547">測試治具板</span><button class="x" id="infoClose" aria-label="關閉">×</button></div>
+    <div><h2>${d.name}</h2><p class="en">${d.en}</p></div>
+    <p class="desc">${d.desc}</p>
+    <dl class="specs">${d.specs.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
+    <div class="tipbox"><b>TE 小知識</b>${d.tip}</div>
+    <div><p class="chain-t">用到它的測項</p><div class="chain">${d.tests.map(t => `<button class="linkb" data-test="${t}">${t} ${TE.byId[t].en}</button>`).join('<br>')}</div></div>
+    <div class="inav"><button id="tFixAll2">◀ 治具板總覽</button><span></span><span></span></div>`;
+}
+function fixOverviewHTML() {
+  return `<div class="ih"><span class="pill" style="background:#ffb547">測試治具板</span><button class="x" id="infoClose" aria-label="關閉">×</button></div>
+    <div><h2>PSU 測試治具板</h2><p class="en">Test Fixture / Load Board · 4.4 kW 52 V</p></div>
+    <p class="desc">治具板接在 PSU 尾端，代替機櫃的匯流排和背板：PSU 的銅夾夾住治具的插刀，訊號針腳插進訊號插座。治具把大電流導到電子負載，同時提供正確的量測點（Kelvin 電壓、漣波 BNC、參考分流器）和測試用的開關（PS_ON、短路、電容組、外部匯流排）。</p>
+    <div class="tipbox"><b>為什麼要治具</b>同一台 PSU，量測點接錯就會量出假的 FAIL。治具把每個量測點固定下來，不同 TE、不同天量到的結果才能比較。AC 側另外用兩台 AC 電源和功率分析儀，直接接 PSU 前面的 Feed A / B 插座。</div>
+    <div><p class="chain-t">治具元件（點名稱或在 3D 模型上點）</p><ul class="tlist">${FIX_DEFS.map(d => `<li><button data-fix="${d.id}"><span class="tid">${d.tests.length} 項</span><span><b>${d.name}</b><small>${d.en}</small></span></button></li>`).join('')}</ul></div>`;
+}
 function renderTestInfo() {
   if (mode !== 'test') return;
   if (tst.view === 'report') info.innerHTML = testReportHTML();
+  else if (tst.view === 'fixall') info.innerHTML = fixOverviewHTML();
+  else if (tst.view === 'fix' && tst.fix) info.innerHTML = fixInfoHTML(tst.fix);
   else if (tst.sel) info.innerHTML = testInfoHTML();
   else { info.hidden = true; return; }
   info.hidden = false;
@@ -3426,8 +3634,10 @@ function renderTestInfo() {
 info.addEventListener('click', e => {
   if (mode !== 'test') return;
   const tb = e.target.closest('[data-test]'); if (tb) { teSelect(tb.dataset.test); return; }
+  const fb = e.target.closest('[data-fix]'); if (fb) { teClickPart('fx:' + fb.dataset.fix); focusBox(new THREE.Box3().setFromObject(fixComps[fb.dataset.fix].group), 9, 20); return; }
   const b = e.target.closest('button'); if (!b) return;
   switch (b.id) {
+    case 'tFixAll2': teFixOverview(); break;
     case 'tRun': if (!tst.run) teStartRun(tst.sel, false); break;
     case 'tDiag': tst.diag = tst.diag ? null : tst.sel; tst.msg = null; renderTestInfo(); if (tst.diag) toast('在 3D 模型上點出最可能造成這個 FAIL 的零件'); break;
     case 'tFix': teFix(b.dataset.d.split(',')); break;
@@ -3652,7 +3862,8 @@ function setMode(m) {
     teInit(); explodeT = 0; setPressed('#tExplode', false);
     tst.view = 'item';
     teSelect(tst.sel || (teList()[0] || TE.items[0]).id, false);
-    flyTo(homePos(), HOME_T);
+    const T = new THREE.Vector3(5, 1.2, 0); // the fixture board sits behind the PSU's output end
+    flyTo(homePos().sub(HOME_T).multiplyScalar(1.12).add(T), T);
   }
   else renderPanel();
   applyLabels(); updateScopeHead();
@@ -3780,7 +3991,7 @@ function pick(ev) {
   const r = renderer.domElement.getBoundingClientRect();
   ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
   ray.setFromCamera(ndc, camera);
-  for (const h of ray.intersectObjects(pickables, false)) {
+  for (const h of ray.intersectObjects(mode === 'test' && fixPick.length ? pickables.concat(fixPick) : pickables, false)) {
     if (!isShown(h.object)) continue;
     if (h.object.userData.cover && coverF > 0.5) continue;
     return h.object.userData.comp;
@@ -3807,7 +4018,8 @@ renderer.domElement.addEventListener('pointermove', e => {
   renderer.domElement.style.cursor = id ? 'pointer' : 'grab';
   if (id && mode !== 'quiz') {
     const r = $('#app').getBoundingClientRect();
-    tip.innerHTML = `<i class="dot" style="background:${ZONES[DEF[id].zone].color}"></i>${DEF[id].name}`;
+    const fxp = id.startsWith('fx:');
+    tip.innerHTML = `<i class="dot" style="background:${fxp ? '#ffb547' : ZONES[DEF[id].zone].color}"></i>${fxp ? '治具 · ' : ''}${partName(id)}`;
     tip.style.left = (e.clientX - r.left + 14) + 'px'; tip.style.top = (e.clientY - r.top + 14) + 'px'; tip.hidden = false;
   } else tip.hidden = true;
 });
@@ -4002,6 +4214,7 @@ function loop(now) {
   fwTick(dt);
   if (mode === 'fw') { updateFwScene(dt); updateFwUI(false); }
   if (mode === 'test') teTick(now);
+  updateFixHL();
   applyLabels();
   updateHighlights();
   if (flowGroup.visible) updateParticles(dt);
