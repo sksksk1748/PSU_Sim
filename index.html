@@ -209,6 +209,35 @@ body.has-scope #info{max-height:calc(100% - 92px - 250px)}
 .flowline b{font:600 10.5px var(--f-mono);padding:2px 5px;border-radius:3px;color:#0c1117}
 #loading{position:absolute;inset:0;display:grid;place-items:center;z-index:30;background:var(--bg);font:500 14px var(--f-mono);color:var(--muted);padding:16px;text-align:center}
 
+/* TE test bench */
+.chips{display:flex;flex-wrap:wrap;gap:4px}
+.chips button{position:relative;font:600 11px var(--f-mono);padding:5px 7px;border-radius:6px;border:1px solid var(--line);background:#111922;color:var(--muted);display:flex;gap:5px;align-items:baseline}
+.chips button:hover{border-color:#3a4a5e;color:var(--fg)}
+.chips button.on{color:#0c1117;background:var(--cc);border-color:var(--cc)}
+.chips i{font-style:normal;font-size:10px;opacity:.8;font-weight:500}
+.chips .fdot{position:absolute;top:-3px;right:-3px;width:8px;height:8px;border-radius:50%;background:var(--bad);box-shadow:0 0 6px var(--bad)}
+.tlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.tlist button{width:100%;display:grid;grid-template-columns:50px 1fr auto;gap:6px;align-items:center;text-align:left;padding:6px 7px;border-radius:6px;border:1px solid transparent}
+.tlist button:hover{background:#1a2430}
+.tlist button.on{background:#1f2b39;border-color:#34465a}
+.tlist .tid{font:600 10.5px var(--f-mono);color:var(--muted)}
+.tlist b{display:block;font-weight:500;font-size:12.5px;line-height:1.3}
+.tlist small{display:block;color:var(--muted);font-size:11px}
+.res{font:700 10px var(--f-mono);font-style:normal;padding:3px 5px;border-radius:4px;background:#1d2733;color:var(--muted);min-width:34px;text-align:center}
+.res.pass{background:rgba(61,220,132,.15);color:var(--ok)} .res.fail{background:rgba(255,77,94,.18);color:var(--bad)} .res.run{background:rgba(255,181,71,.18);color:var(--ac)}
+.tres{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:8px;border:1px solid var(--line);background:#0f161e}
+.tres .mono{font-weight:600;font-size:14px}
+.tres.pass{border-color:rgba(61,220,132,.45)} .tres.fail{border-color:rgba(255,77,94,.55);background:rgba(255,77,94,.07)}
+.verdict{font:700 15px var(--f-display);letter-spacing:.08em}
+.btn.armed{background:var(--bad);border-color:var(--bad);color:#fff}
+.linkb{color:var(--ac);font:inherit;text-decoration:underline;text-underline-offset:2px}
+.rtable{width:100%;border-collapse:collapse;font-size:12px}
+.rtable th,.rtable td{padding:5px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+.rtable th{font:600 10.5px var(--f-mono);color:var(--muted);letter-spacing:.06em}
+.rtable td.mono{white-space:nowrap}
+.plbl{font:600 10.5px/1.2 var(--f-mono);color:#ffd28a;background:rgba(8,12,17,.9);border:1px solid #ffb547;border-radius:3px;padding:3px 7px;white-space:nowrap;pointer-events:none;display:flex;align-items:center;gap:5px}
+.plbl i{width:6px;height:6px;border-radius:50%;background:#ffb547;box-shadow:0 0 6px #ffb547}
+
 @media (min-width:821px) and (max-width:1180px){ .brand .eyebrow{display:none} .tools button{padding:6px 8px;font-size:12px} }
 @media (max-width:820px){
   #topbar{flex-wrap:wrap;gap:6px;top:8px;left:8px;right:8px}
@@ -259,6 +288,7 @@ body.has-scope #info{max-height:calc(100% - 92px - 250px)}
       <button data-mode="flow" role="tab">能量流</button>
       <button data-mode="ats" role="tab" id="simTab">ATS 模擬</button>
       <button data-mode="fw" role="tab">FW 更新</button>
+      <button data-mode="test" role="tab" id="testTab" hidden>TE 測試</button>
       <button data-mode="quiz" role="tab">測驗</button>
     </nav>
     <div class="tools">
@@ -1667,6 +1697,7 @@ const MODEL_C = {
   },
 };
 const MODELS = { crps12: MODEL_A, dc52: MODEL_B, bbu: MODEL_C };
+MODEL_B.tests = true; // the TE bench (test plan) is written for the 4.4 kW / 52 V unit
 
 /* ================= MODEL STATE ================= */
 let M = MODEL_A, DEFS = [], DEF = {}, STAGES = [], STAGE_COLORS = [], stageCol = [];
@@ -1818,6 +1849,18 @@ function buildModel() {
     lab('pins', 'CAN_H / CAN_L 針腳', 0.55, 'can').element.style.color = '#ffd166';
     lab('pins', 'SDA / SCL 針腳（PMBus）', 0.55, 'pmbus').element.style.color = '#5ad1ff';
     for (const t of fw.targets) t.label = lab(t.hops[t.hops.length - 1], '', 1.1);
+  }
+
+  // TE bench: probe / instrument hookup points, shown for the selected test item
+  teGroup = null; teProbe = {};
+  if (M.tests) {
+    teGroup = new THREE.Group(); teGroup.visible = false; ROOT.add(teGroup);
+    for (const k in TE_PROBES) {
+      const [t, x, y, z] = TE_PROBES[k];
+      const m = new THREE.Mesh(SPH(0.14), new THREE.MeshBasicMaterial({ color: 0xffb547 }));
+      m.position.set(x, y, z); m.visible = false; teGroup.add(m);
+      teProbe[k] = { m, lo: css2d('plbl', `<i></i>${t}`, new THREE.Vector3(x, y + 0.4, z), teGroup) };
+    }
   }
 }
 
@@ -1976,6 +2019,7 @@ function simStep(dt) {
    0x10 session → 0x27 seed/key → 0x31 erase → 0x34 request download → 0x36 transfer data → 0x37 exit → 0x31 CRC check → 0x11 reset → 0x22 read version.
    Targets that are not on CAN are reached through the Secondary DSP acting as a gateway (UART across the isolator). */
 let fwGroup = null, fwEdges = [], fwLabels = [], fwHostLed = null, fwHostLabel = null;
+let teGroup = null, teProbe = {};
 const fw = { running: false, queue: [], cur: null, steps: [], si: 0, stepT: 0, block: 0, phase: 'idle', outT: 0, t: 0, speed: 1, kbps: 500, bus: 'can', khz: 100, first: true,
   frames: 0, bytes: 0, errFrames: 0, trace: [], traceDirty: true, scope: null, scopeNote: '', scopeReal: 0, pwrDone: false,
   opts: { canErr: false, crc: false, pwr: false }, targets: [] };
@@ -2492,8 +2536,12 @@ function renderPanel() {
     h += fwPanelHTML();
   } else if (mode === 'quiz') {
     h += renderQuiz();
+  } else if (mode === 'test') {
+    h += testPanelHTML();
   }
+  const keepScroll = mode === 'test' ? panelBody.scrollTop : 0;
   panelBody.innerHTML = h;
+  if (keepScroll) panelBody.scrollTop = keepScroll;
   if (mode === 'ats') { sim.logDirty = true; updateSimUI(true); }
   if (mode === 'fw') { fw.traceDirty = true; updateFwUI(true); }
 }
@@ -2569,6 +2617,19 @@ function fmtT(t) {
 }
 
 panelBody.addEventListener('click', e => {
+  if (mode === 'test') {
+    const tb = e.target.closest('[data-test]'); if (tb) { teSelect(tb.dataset.test); return; }
+    const cb = e.target.closest('[data-cat]'); if (cb) { tst.cat = cb.dataset.cat; tst.part = null; renderPanel(); panelBody.scrollTop = 0; return; }
+    const b = e.target.closest('button'); if (!b) return;
+    switch (b.id) {
+      case 'tPartX': tst.part = null; if (tst.sel) tst.cat = TE.byId[tst.sel].cat; renderPanel(); break;
+      case 'tRunCat': teRunCat(); renderPanel(); break;
+      case 'tReport': tst.view = 'report'; renderTestInfo(); break;
+      case 'tResetS': if (!tst.run && !tst.queue.length) { delete tst.S[tst.cur]; tst.msg = null; tst.diag = null; teSave(); renderPanel(); renderTestInfo(); updateScopeHead(); toast(tst.cur === 'blind' ? '換了一台新的盲測樣品' : '這台樣品的測試紀錄已清除'); } break;
+      case 'tReveal': { const S = teS(); S.revealed = true; teSave(); tst.view = 'report'; renderTestInfo(); renderPanel(); break; }
+    }
+    return;
+  }
   const one = e.target.closest('[data-fwone]'); if (one) { fwStart([one.dataset.fwone]); return; }
   const card = e.target.closest('[data-fw]');
   if (card) { const t = tgt(card.dataset.fw); selIds = new Set([t.comp]); focusPoint(new THREE.Vector3(...M.fw.nodes[t.hops[t.hops.length - 1]]), 10); renderPanel(); return; }
@@ -2606,6 +2667,11 @@ panelBody.addEventListener('input', e => {
 });
 panelBody.addEventListener('change', e => {
   const id = e.target.id;
+  if (id === 'tSample') {
+    if (tst.run || tst.queue.length) { e.target.value = tst.cur; toast('量測進行中，請等一下再換樣品'); return; }
+    tst.cur = e.target.value; tst.msg = null; tst.diag = null; tst.view = 'item'; teSave();
+    renderPanel(); renderTestInfo(); updateScopeHead(); toast(`換上 ${teSample().n}`); return;
+  }
   if (id === 'slow') sim.slow = +e.target.value;
   if (id === 'speed') sim.speed = +e.target.value;
   if (id === 'fwSpeed') fw.speed = +e.target.value;
@@ -2694,6 +2760,804 @@ function answerQuiz(id) {
 }
 function nextQuestion() { quiz.i++; quiz.state = quiz.i >= quiz.list.length ? 'done' : 'ask'; renderPanel(); }
 
+/* ================= TE TEST BENCH (4.4 kW / 52 V) =================
+   Every item of the TE test plan can be run on a DUT sample. Samples hide defects; a defect changes
+   what its tests measure. A FAIL leads to diagnosis (click the guilty part in 3D) and a part swap. */
+const TE_CATS = {
+  IN:  { n: '輸入特性', en: 'Input', c: '#ffb547', eq: '可程控 AC 電源、功率分析儀、電子負載、示波器 + 電流探棒',
+         tip: '輸入測項在 200 / 230 / 277 Vac 三個電壓點做。湧浪電流要在電壓峰值（90° / 270°）上電，才是最壞情況。' },
+  ATS: { n: 'ATS 雙路切換', en: 'ATS', c: '#ffd166', eq: '兩台可程控 AC 電源（可設相位與斷電角度）、示波器、高壓差動探棒',
+         tip: '兩台 AC 電源分別當 Feed A / B，斷電角度掃 0° / 90° / 180° / 270°。同時量 Vbulk：保持餘裕 = 保持時間 − 切換時間，一定要是正的。' },
+  EFF: { n: '效率', en: 'Efficiency', c: '#8bd17c', eq: '功率分析儀（輸入、輸出各一組）、電子負載',
+         tip: '輸出功率要在 52 V / RTN 銅夾上量（包含連接器壓降）。每個負載點熱穩定後再讀值。' },
+  OUT: { n: '輸出特性', en: 'Output', c: '#2fd4b5', eq: '電子負載（可動態）、示波器（20 MHz 頻寬限制）、彈簧接地針',
+         tip: '漣波要用 20 MHz 頻寬限制，探棒用彈簧接地針直接量在輸出端，不要用長接地夾，不然量到的都是天線收到的雜訊。' },
+  PRT: { n: '保護功能', en: 'Protection', c: '#ff6b3d', eq: '電子負載、短路治具、溫箱、PMBus 工具',
+         tip: '先確認電子負載和短路治具的額定夠大。每次保護動作後都要讀 STATUS_WORD，確認旗標正確、可以清除。' },
+  THM: { n: '熱與可靠度', en: 'Thermal', c: '#ff9a6b', eq: '溫箱、熱電偶 + 溫度記錄器、噪音計、燒機架',
+         tip: '熱電偶用耐高溫膠帶固定在零件本體最熱的地方。每 10 分鐘變化小於 1 °C 才算熱穩定。' },
+  COM: { n: '數位通訊與韌體', en: 'Comm / FW', c: '#5aa9ff', eq: 'PMBus / CAN 轉接器、上位機軟體、功率分析儀（比對讀值）',
+         tip: '讀值精度要在多個負載點和功率分析儀比對，低負載時電流與功率的誤差通常最大。' },
+  SAF: { n: '安規', en: 'Safety', c: '#ff4d5e', eq: '耐壓測試器、絕緣電阻計、接地電阻測試器、接觸電流量測網路',
+         tip: '耐壓前把 L / N 短接、52 V / RTN 短接。測完要確認已經放電，才能碰 DUT。' },
+  EMC: { n: 'EMC', en: 'EMC', c: '#b48cff', eq: 'EMC 實驗室：LISN、接收機、天線、ESD 槍、EFT / Surge 產生器',
+         tip: 'Feed A / B 兩路都要量。抗擾度測試時要同時監看 Vout、PWOK 和 PMBus 通訊，才知道有沒有符合判定等級。' },
+  SYS: { n: '機櫃 BBU 系統', en: 'System', c: '#5ad1ff', eq: '機櫃電源架、BBU、多台 PSU、示波器、伺服器負載',
+         tip: '同時量匯流排電壓、每台 PSU 的電流和 BBU 電流，觸發點設在 AC 斷電那一刻。' },
+};
+const TE_PROBES = {
+  acA:    ['Feed A：AC 電源 + 功率分析儀', -14.2, 3.6, -0.9],
+  acB:    ['Feed B：第二台 AC 電源', -14.2, 3.6, -2.6],
+  iin:    ['電流探棒夾 L 線', -13.15, 3.5, -0.3],
+  relay:  ['K1 / K2 繼電器', -12.4, Y0 + 2.3, -1.75],
+  bulk:   ['Vbulk 高壓差動探棒', -1.6, Y0 + 3.9, -0.6],
+  vout:   ['Vout：量在 52 V / RTN 銅夾', 16.0, 3.0, 0.1],
+  load:   ['電子負載（Iout）', 17.6, 2.2, 1.3],
+  sig:    ['PMBus / PWOK / PS_ON 針腳', 16.3, 2.1, -2.6],
+  shunt:  ['RS1 分流電阻', 12.1, Y0 + 0.9, 0.3],
+  oring:  ['ORing MOSFET', 13.2, Y0 + 0.7, 0.0],
+  fan:    ['風扇轉速 / 噪音計（1 m）', -14.5, 4.3, 1.7],
+  tcPfc:  ['TC1 GaN 快臂', -4.2, Y0 + 2.6, -1.25],
+  tcBulk: ['TC2 Bulk 電容', -1.6, Y0 + 3.6, 1.4],
+  tcX:    ['TC3 變壓器 T2', 4.4, Y0 + 3.0, 1.55],
+  tcSr:   ['TC4 SR MOSFET', 6.8, Y0 + 2.8, -1.65],
+  tcOut:  ['TC5 輸出電容', 10.08, Y0 + 2.0, -0.2],
+  hipotP: ['Hi-pot：L + N 短接', -13.6, 3.9, -1.75],
+  hipotS: ['Hi-pot：52 V + RTN 短接', 16.0, 3.4, 1.3],
+  pe:     ['PE 接地端', -13.15, 1.3, -0.9],
+  chassis:['外殼接地點', -15.2, 1.4, 3.1],
+  lisn:   ['LISN（傳導量測）', -14.6, 4.0, -1.75],
+  bus:    ['機櫃 52 V 匯流排', 17.8, 3.4, 0.1],
+  bbu:    ['BBU（同一條匯流排）', 18.8, 1.6, 2.6],
+  psu2:   ['並聯的 PSU #2–#4', 18.8, 1.6, -2.6],
+};
+const TE_DEFECTS = {
+  bulk:  { n: 'Bulk 電容容量衰退', parts: ['bulk'], hint: 'AC 中斷時，是哪個零件在撐住輸出？',
+           ex: 'Bulk 電容從 1500 µF 掉到約 950 µF（老化或錯料），保持時間只剩約 7 ms，比 ATS 約 8 ms 的切換時間還短，切換時輸出就掉了。' },
+  esr:   { n: '輸出電容 ESR 偏高', parts: ['outcap'], hint: '漣波和負載階躍的電壓跌落，主要由輸出端哪個零件決定？',
+           ex: '輸出電解電容的 ESR 偏高（批次問題），同樣的漣波電流在 ESR 上產生更大的壓降，漣波和動態跌落都超標。' },
+  ntc:   { n: 'NTC 錯料（冷態阻值太低）', parts: ['inrush'], hint: '冷開機時，是誰在限制 Bulk 電容的充電電流？',
+           ex: 'NTC 熱敏電阻用錯料號，冷態阻值只有規格的三分之一，Bulk 充電的湧浪電流衝到將近 100 A。' },
+  relay: { n: 'ATS 繼電器 K2 動作過慢', parts: ['ats'], hint: 'A→B 切換是由哪個零件執行的？',
+           ex: 'K2 繼電器的線圈驅動電壓不足，吸合時間變長，A→B 切換要約 14 ms，超過 Bulk 的保持時間，輸出會掉，機櫃 BBU 被迫放電。' },
+  shunt: { n: '電流感測校正錯誤', parts: ['shunt', 'dsp_sec'], hint: '輸出電流是靠哪個零件量出來的？',
+           ex: '產線寫入二次側 DSP 的電流校正參數錯了，IOUT 讀值偏高約 9%。OCP 因此提早動作，均流也跟著偏掉。量測元件是分流電阻，校正值存在二次側 DSP。' },
+  pfc:   { n: 'PFC 電流迴路參數錯誤', parts: ['dsp_pri', 'pfc_sw', 'pfc_l'], hint: '哪一級負責讓輸入電流跟著輸入電壓走？',
+           ex: '一次側 DSP 的 PFC 電流迴路增益設錯，AC 過零點附近電流失真，輕載的 PF 和 iTHD 都不合格，諧波電流也超標。' },
+  ycap:  { n: 'Y 電容漏件', parts: ['emi'], hint: '哪個零件負責把開關雜訊擋在電源裡面？',
+           ex: 'EMI 濾波器的 CY1 / CY2 沒有上件，共模雜訊沒有回流路徑，150 kHz–2 MHz 的傳導發射超標，傳導抗擾時 PMBus 也會出錯。（接觸電流反而變小，所以安規量不出來。）' },
+  fan:   { n: '風扇軸承劣化', parts: ['fan'], hint: '溫升和噪音一起異常，先看散熱系統。',
+           ex: '風扇軸承磨損，同樣的 PWM 命令下轉速少約 25%，風量不足讓零件溫升超標，噪音也變大，但 FW 沒有發出轉速告警。' },
+  oring: { n: 'ORing MOSFET 閘極驅動異常', parts: ['oring'], hint: '防止匯流排電流倒灌回 PSU 的是哪個零件？',
+           ex: '熱插拔 / ORing 控制器的閘極驅動異常：插入時 MOSFET 直接全導通沒有限流，關機時又不會關斷，匯流排電流倒灌回 PSU。' },
+  xfmr:  { n: '變壓器絕緣膠帶破損', parts: ['xfmr'], hint: '跨越一次側與二次側隔離邊界的主要零件是？',
+           ex: 'T2 一次側和二次側繞組之間的絕緣膠帶在繞線時刮破，3000 Vac 耐壓在 41 秒崩潰，絕緣電阻也掉到只有幾 MΩ。' },
+  llc:   { n: 'LLC 諧振電容公差過大', parts: ['resonant'], hint: '兩相 LLC 電流不平均，通常是哪組元件的公差造成？',
+           ex: 'CR2 的容值偏離約 8%，兩相 LLC 的電流分配變成約 58% / 42%，比較重的那一相損耗和溫度都偏高，滿載效率掉了 1% 以上。' },
+};
+const TE_SAMPLES = [
+  { k: 's1', n: '#001 · Golden 樣品', d: [], desc: '已知良品，所有測項都應該 PASS。先用它熟悉每個測項的正常波形。' },
+  { k: 's2', n: '#014 · EVT 樣品', d: ['bulk', 'esr'] },
+  { k: 's3', n: '#027 · EVT 樣品', d: ['relay', 'shunt'] },
+  { k: 's4', n: '#052 · DVT 樣品', d: ['pfc', 'ycap', 'fan'] },
+  { k: 's5', n: '#088 · DVT 樣品', d: ['ntc', 'oring', 'xfmr', 'llc'] },
+  { k: 'blind', n: '盲測樣品（隨機 2–3 個問題）', d: null },
+];
+
+/* plot builders: each returns a description the scope draws ('lanes' = time traces) */
+const SIN = (t, f = 50, ph = 0) => Math.sin(TAU * f * t + ph);
+const fx = (v, d = 1) => Number(v).toFixed(d);
+const RED = 'rgba(255,77,94,.85)', AMB = 'rgba(255,181,71,.75)';
+function wInrush(pk, lim) {
+  const T = 0.05, ton = 0.01, top = Math.max(lim, pk) * 1.15;
+  return { k: 'lanes', tdiv: '5 ms/div', lanes: [
+    { n: 'Vin 277 Vac', lo: -420, hi: 420, c: '#ffb547', f: x => { const t = x * T; return t < ton ? 0 : 392 * SIN(t, 50, -Math.PI / 2); } },
+    { n: 'Iin 輸入電流', lo: -top * 0.4, hi: top, c: '#5ad1ff', lines: [[lim, `上限 ${lim} A`, RED]], f: x => {
+      const t = x * T; if (t < ton) return 0; const d = t - ton, s = SIN(t, 50, -Math.PI / 2);
+      return pk * Math.exp(-d / 0.0016) + 0.2 * pk * Math.exp(-d / 0.012) * Math.pow(Math.abs(s), 10) * Math.sign(s) * (1 - Math.exp(-d / 0.003)) + 30 * s * (1 - Math.exp(-d / 0.015)); } }],
+    marks: [[ton / T, '上電（電壓峰值 90°）', '#ffb547']] };
+}
+function wAcPf(pf, thd, ipk, vac = 230) {
+  const T = 0.04, h = thd / 100, ph = Math.acos(clamp(pf * Math.sqrt(1 + h * h), 0, 1)), vp = vac * 1.414;
+  return { k: 'lanes', tdiv: '4 ms/div', lanes: [
+    { n: `Vin ${vac} Vac`, lo: -vp * 1.15, hi: vp * 1.15, c: '#ffb547', f: x => vp * SIN(x * T) },
+    { n: 'Iin 輸入電流', lo: -ipk * 1.5, hi: ipk * 1.5, c: '#5ad1ff', f: x => { const t = x * T; return ipk * (SIN(t, 50, -ph) + h * 0.85 * SIN(t, 150, 0.4) + h * 0.5 * SIN(t, 250, 1.2)); } }] };
+}
+function wAts(tr, H, phB = 0.5, title = 'Feed A 斷電') {
+  const T = 0.1, t0 = 0.02, lost = tr >= H, tOff = t0 + H / 1000;
+  const vb = t => {
+    if (t < t0) return 400;
+    const d = (t - t0) * 1000, dip = Math.min(d, tr);
+    let v2 = 160000 - 70000 * dip / H; if (v2 < 90000) v2 = 90000 - (dip - H) * 3000;
+    let v = Math.sqrt(Math.max(v2, 0));
+    if (d > tr) v += (400 - v) * (1 - Math.exp(-(d - tr) / 4));
+    return v;
+  };
+  return { k: 'lanes', tdiv: '10 ms/div', lanes: [
+    { n: 'Feed A', lo: -420, hi: 420, c: '#ffb547', f: x => { const t = x * T; return t < t0 ? 325 * SIN(t) : 0; } },
+    { n: 'Feed B', lo: -420, hi: 420, c: '#e59cff', f: x => 325 * SIN(x * T, 50, phB) },
+    { n: 'Vbulk', lo: 240, hi: 420, c: '#ff4d4d', lines: [[300, '300 V：LLC 撐不住', RED]], f: x => vb(x * T) },
+    { n: 'Vout', lo: 0, hi: 58, c: '#2fd4b5', lines: [[49.4, '規格下限 49.4 V', AMB]], f: x => { const t = x * T; return !lost || t < tOff ? 52 + 0.05 * nz(x * 3) : 52 * Math.exp(-(t - tOff) / 0.002); } }],
+    marks: [[t0 / T, title, '#ffb547'], [(t0 + tr / 1000) / T, `切到 B（${fx(tr)} ms）`, '#e59cff']].concat(lost ? [[tOff / T, 'Vout 掉落', '#ff4d5e']] : []) };
+}
+function wHoldup(H, lead) {
+  const T = 0.03, t0 = 0.004, tH = t0 + H / 1000, tP = tH - lead / 1000;
+  return { k: 'lanes', tdiv: '3 ms/div', lanes: [
+    { n: 'Vin（兩路同時移除）', lo: -360, hi: 360, c: '#ffb547', f: x => { const t = x * T; return t < t0 ? 283 * SIN(t, 50, -TAU * 50 * t0) : 0; } },
+    { n: 'Vbulk', lo: 200, hi: 420, c: '#ff4d4d', lines: [[300, '300 V', RED]], f: x => { const t = x * T; if (t < t0) return 400; const d = (t - t0) * 1000; const v2 = 160000 - 70000 * d / H; return v2 > 90000 ? Math.sqrt(v2) : 300 - (d - H) * 12; } },
+    { n: 'Vout', lo: 0, hi: 58, c: '#2fd4b5', lines: [[49.4, '49.4 V', AMB]], f: x => { const t = x * T; return t < tH ? 52 : Math.max(0, 49.4 - (t - tH) * 9000); } },
+    { n: 'PWOK', lo: -0.3, hi: 1.3, c: '#5aa9ff', f: x => x * T < tP ? 1 : 0 }],
+    marks: [[t0 / T, 'AC 移除', '#ffb547'], [(t0 + 0.010) / T, '要求 ≥ 10 ms', 'rgba(200,215,230,.7)'], [tP / T, 'PWOK ↓', '#5aa9ff'], [tH / T, `Vout 掉出規格 ${fx(H)} ms`, '#2fd4b5']] };
+}
+function wRipple(pp, lim) {
+  const R = Math.max(pp, lim) * 0.75;
+  return { k: 'lanes', tdiv: '2 µs/div · 20 MHz BWL', lanes: [
+    { n: 'Vout 漣波（AC 耦合，mV）', lo: -R, hi: R, c: '#2fd4b5', lines: [[lim / 2, `+${lim / 2} mV`, RED], [-lim / 2, `−${lim / 2} mV`, RED]],
+      f: x => { const ph = frac(x * 8); return pp / 2 * (0.78 * tri(x * 8) + 0.38 * Math.exp(-ph * 40) * Math.sin(ph * 180)); } }] };
+}
+function wDyn(us, rec, lim) {
+  const T = 2e-3, t1 = 0.4e-3, t2 = 1.4e-3, tau = rec / 1000 / 3, R = Math.max(us, lim) * 1.5;
+  const I = t => (t >= t1 && t < t2) ? 85 : 42.5;
+  const e = d => d < 0 ? 0 : Math.min(1, d / 6e-6) * Math.exp(-d / tau);
+  return { k: 'lanes', tdiv: '200 µs/div', lanes: [
+    { n: 'Iout（50% ↔ 100%）', lo: 0, hi: 100, c: '#5ad1ff', f: x => I(x * T) },
+    { n: 'Vout', lo: 52 - R, hi: 52 + R, c: '#2fd4b5', lines: [[52 + lim, `+${lim} V（5%）`, RED], [52 - lim, `−${lim} V`, RED]],
+      f: x => { const t = x * T; return 52.02 - 0.24 * (I(t) - 42.5) / 42.5 - us * e(t - t1) + 0.85 * us * e(t - t2); } }],
+    marks: [[t1 / T, '負載 ↑', '#5ad1ff'], [t2 / T, '負載 ↓', '#5ad1ff']] };
+}
+function wTurnOn(o) {
+  return { k: 'lanes', tdiv: o.tdiv, lanes: [
+    { n: o.ctrl, lo: -0.3, hi: 1.3, c: '#ffb547', f: x => x * o.T >= o.tc ? 1 : 0 },
+    { n: 'Vout', lo: 0, hi: 58, c: '#2fd4b5', lines: [[49.4, '49.4 V', AMB]], f: x => { const t = x * o.T; if (t < o.ts) return 0; const k = (t - o.ts) / o.tr; return k < 1 ? 52 * k : 52 * (1 + o.os / 100 * Math.exp(-(k - 1) * 2.5) * Math.sin((k - 1) * 3.2) * 1.6); } },
+    { n: 'PWOK', lo: -0.3, hi: 1.3, c: '#5aa9ff', f: x => x * o.T >= o.tp ? 1 : 0 }],
+    marks: [[o.tc / o.T, `${o.ctrl} ON`, '#ffb547'], [o.tp / o.T, 'PWOK ↑', '#5aa9ff']] };
+}
+function wTurnOff() {
+  const T = 0.1, tc = 0.02, tp = 0.0205, ts = 0.022;
+  return { k: 'lanes', tdiv: '10 ms/div', lanes: [
+    { n: 'PS_ON', lo: -0.3, hi: 1.3, c: '#ffb547', f: x => x * T < tc ? 1 : 0 },
+    { n: 'Vout', lo: 0, hi: 58, c: '#2fd4b5', f: x => { const t = x * T; return t < ts ? 52 : 52 * Math.exp(-(t - ts) / 0.009); } },
+    { n: 'PWOK', lo: -0.3, hi: 1.3, c: '#5aa9ff', f: x => x * T < tp ? 1 : 0 }],
+    marks: [[tc / T, 'PS_ON OFF', '#ffb547'], [ts / T, 'Vout 單調下降', '#2fd4b5']] };
+}
+// ramp a stimulus until the protection trips: hiccup / latch off / ATS switch-over
+function wProt(o) {
+  const x0 = 0.05, span = 0.8, xt = x0 + clamp((o.trip - o.a) / (o.b - o.a), 0, 1) * span;
+  const ramp = x => o.a + (o.b - o.a) * clamp((x - x0) / span, 0, 1);
+  const vals = [o.a, o.b, o.lo, o.hi].filter(v => v != null), lo = Math.min(...vals), hi = Math.max(...vals), pad = (hi - lo) * 0.12;
+  const lines = [[o.lo, `下限 ${o.lo}`, RED], [o.hi, `上限 ${o.hi}`, RED]].filter(l => l[0] != null);
+  const stim = x => x < xt ? ramp(x)
+    : o.after === 'pulse' ? (frac((x - xt) / 0.12) < 0.12 ? o.trip : 0)
+    : o.after === 'decay' ? ramp(xt) * Math.exp(-(x - xt) * 40)
+    : o.after === 'cool' ? o.a + (ramp(xt) - o.a) * Math.exp(-(x - xt) * 6)
+    : ramp(x);
+  const out = o.mode === 'switch' ? { n: 'ATS 使用中（高 = A，低 = B）', lo: -0.3, hi: 1.3, c: '#e59cff', f: x => x < xt ? 1 : 0 }
+    : o.mode === 'pwok' ? { n: 'PWOK', lo: -0.3, hi: 1.3, c: '#5aa9ff', f: x => x < xt ? 1 : 0 }
+    : o.mode === 'hiccup' ? { n: 'Vout', lo: 0, hi: 58, c: '#2fd4b5', f: x => x < xt ? 52 - 0.6 * (x / xt) : (frac((x - xt) / 0.12) < 0.12 ? 50 : 0) }
+    : { n: 'Vout', lo: 0, hi: 58, c: '#2fd4b5', f: x => x < xt ? 52 : 52 * Math.exp(-(x - xt) * 60) };
+  return { k: 'lanes', tdiv: o.tdiv, lanes: [{ n: `${o.sn}（${o.su}）`, lo: lo - pad, hi: hi + pad, c: o.c || '#ff9a6b', lines, f: stim }, out],
+    marks: [[xt, `動作 ${fx(o.trip, o.dec ?? 1)} ${o.su}`, '#ff4d5e']] };
+}
+function wBrown(off, on) {
+  const T = 200, vin = t => t < 10 ? 230 : t < 90 ? 230 - (t - 10) : t < 110 ? 150 : t < 190 ? 150 + (t - 110) : 230;
+  const xo = (10 + 230 - off) / T, xn = (110 + on - 150) / T;
+  return { k: 'lanes', tdiv: '20 s/div · 1 V/s', lanes: [
+    { n: 'Vin（Vac rms）', lo: 130, hi: 245, c: '#ffb547', lines: [[off, `關 ${fx(off)}`, AMB], [on, `開 ${fx(on)}`, 'rgba(61,220,132,.75)']], f: x => vin(x * T) },
+    { n: 'Vout', lo: 0, hi: 58, c: '#2fd4b5', f: x => (x < xo || x >= xn) ? 52 : 0 }],
+    marks: [[xo, 'Brown-out 關機', '#ff4d5e'], [xn, 'Brown-in 恢復', '#3ddc84']] };
+}
+function wHotplug(peak, dip, removal) {
+  const T = 0.02, t0 = 0.004;
+  if (removal) return { k: 'lanes', tdiv: '2 ms/div', lanes: [
+    { n: 'DUT 電流', lo: -5, hi: 100, c: '#5ad1ff', f: x => x * T < t0 ? 63.8 : 0 },
+    { n: 'PSU #2–#4 各自電流', lo: 0, hi: 100, c: '#ffd166', f: x => { const t = x * T; return t < t0 ? 63.8 : 85 + 6 * Math.exp(-(t - t0) / 0.0008) * Math.sin((t - t0) * 4000); } },
+    { n: 'Vbus', lo: 46, hi: 54, c: '#2fd4b5', lines: [[49.4, '49.4 V', AMB]], f: x => { const t = x * T; return t < t0 ? 52 : 52 - 0.24 - dip * Math.exp(-(t - t0) / 0.0012) * Math.min(1, (t - t0) / 0.0002); } }],
+    marks: [[t0 / T, '拔出 DUT', '#5ad1ff']] };
+  const bad = peak > 30, top = Math.max(30, peak) * 1.15;
+  return { k: 'lanes', tdiv: '2 ms/div', lanes: [
+    { n: 'DUT 湧入電流', lo: -3, hi: top, c: '#5ad1ff', lines: [[20, '限流 20 A', RED]], f: x => { const t = x * T; if (t < t0) return 0; const d = t - t0; return bad ? peak * Math.exp(-d / 0.0004) : (d < 0.006 ? peak * Math.min(1, d / 0.0003) : 0.4); } },
+    { n: 'Vbus', lo: 46, hi: 54, c: '#2fd4b5', lines: [[49.4, '49.4 V', AMB]], f: x => { const t = x * T; return t < t0 ? 52 : 52 - dip * Math.exp(-(t - t0) / (bad ? 0.0006 : 0.002)) * Math.min(1, (t - t0) / 0.0002); } }],
+    marks: [[t0 / T, '插入匯流排', '#5ad1ff']] };
+}
+function wBbu(kind, tr = 7.8, H = 11.6) {
+  if (kind === 'recover') {
+    const T = 1, ta = 0.15, ts = 0.45;
+    return { k: 'lanes', tdiv: '100 ms/div', lanes: [
+      { n: 'AC（Feed A / B）', lo: -0.3, hi: 1.3, c: '#ffb547', f: x => x * T >= ta ? 1 : 0 },
+      { n: 'Vbus', lo: 46, hi: 54, c: '#2fd4b5', f: x => { const t = x * T; return t < ts ? 50.1 : 50.1 + 1.9 * clamp((t - ts) / 0.06, 0, 1); } },
+      { n: 'BBU 電流（+ 放電 / − 充電）', lo: -20, hi: 100, c: '#5aa9ff', lines: [[0, '0 A', 'rgba(200,215,230,.35)']], f: x => { const t = x * T; return t < ts ? 85 : t < ts + 0.06 ? 85 * (1 - (t - ts) / 0.06) : t < 0.62 ? 0 : -6; } }],
+      marks: [[ta, 'AC 恢復', '#ffb547'], [ts, 'PSU 軟啟動接回', '#2fd4b5'], [0.62, 'BBU 開始充電', '#5aa9ff']] };
+  }
+  const T = 0.1, t0 = 0.02, dual = kind === 'dual', drop = dual || tr >= H, tOff = t0 + H / 1000;
+  const vbus = t => { if (!drop || t < tOff) return 52 + 0.04 * nz(t * 30); const d = t - tOff; return 50.1 + 1.9 * Math.exp(-d / 0.0005) - 0.45 * Math.exp(-d / 0.003) * (1 - Math.exp(-d / 0.0004)); };
+  return { k: 'lanes', tdiv: '10 ms/div', lanes: [
+    { n: 'Feed A', lo: -0.3, hi: 1.3, c: '#ffb547', f: x => x * T < t0 ? 1 : 0 },
+    { n: 'Feed B', lo: -0.3, hi: 1.3, c: '#e59cff', f: x => dual && x * T >= t0 ? 0 : 1 },
+    { n: 'Vbus', lo: 46, hi: 54, c: '#2fd4b5', lines: [[50, '50 V：BBU 接手', 'rgba(90,169,255,.7)']], f: x => vbus(x * T) },
+    { n: 'BBU 放電電流', lo: -5, hi: 100, c: '#5aa9ff', f: x => { const t = x * T; return drop && t >= tOff ? 85 * Math.min(1, (t - tOff) / 0.0015) : 0; } }],
+    marks: [[t0 / T, dual ? '兩路斷電' : 'Feed A 斷電', '#ffb547']].concat(drop ? [[tOff / T, 'BBU 接手', '#5aa9ff']] : []) };
+}
+function wHipot(V, br) {
+  const T = 65, v = t => (br && t >= br) ? 0 : t < 5 ? V * t / 5 : t < 60 ? V : t < 62 ? V * (62 - t) / 2 : 0;
+  return { k: 'lanes', tdiv: '6.5 s/div', lanes: [
+    { n: '測試電壓（Vac）', lo: 0, hi: V * 1.2, c: '#ff4d5e', f: x => v(x * T) },
+    { n: '漏電流（mA）', lo: 0, hi: 14, c: '#ffd166', lines: [[10, '跳脫 10 mA', RED]], f: x => { const t = x * T; if (br && t >= br) return t < br + 0.6 ? 13 : 0; return 1.4 * v(t) / V + 0.03 * nz(x * 5); } }],
+    marks: br ? [[br / T, `崩潰 ${br} s`, '#ff4d5e']] : [[60 / T, '60 s 通過', '#3ddc84']] };
+}
+const meter = (v, unit, lo, hi, min, max, dec = 1) => ({ k: 'meter', v, unit, lo, hi, min, max, dec });
+const RES = (s, pass, plot, note) => ({ s, pass: !!pass, plot, note });
+const CK = (s, rows, note) => { const pass = rows.every(r => r[1]); return RES(typeof s === 'function' ? s(pass) : s, pass, { k: 'text', rows }, note); };
+const OKF = (a, b) => p => p ? a : b;
+const teH = (D, j) => (D.has('bulk') ? 7.1 : 11.6) + j(0.15, 'H');
+const teTr = (D, j, base = 7.8) => (D.has('relay') ? base + 6.4 : base) + j(0.25, 'tr');
+const teBulkMin = (tr, H) => tr >= H ? null : Math.sqrt(160000 - 70000 * tr / H);
+const TI = (id, en, zh, cond, lim, parts, pr, m, tip) => ({ id, cat: id.split('-')[0], en, zh, cond, lim, parts, pr, m, tip });
+const DERATE = [[25, 4400], [30, 4400], [35, 4400], [40, 4400], [45, 4400], [50, 3960], [55, 3520]];
+
+const TE_ITEMS_52 = [
+  TI('IN-01', 'Input Voltage Range', '輸入電壓範圍', '200 / 230 / 277 Vac，空載、50%、100% 負載', '輸出在規格內，無保護動作', ['ac_inlet', 'pfc_sw', 'connector'], ['acA', 'vout', 'load'],
+    (D, j) => CK('9 個條件全部正常', [[`200 Vac · 100%：Vout ${fx(51.88 + j(0.02), 2)} V，滿載不降額`, true], [`230 Vac · 100%：Vout ${fx(51.88 + j(0.02, 'b'), 2)} V`, true], [`277 Vac · 100%：Vout ${fx(51.88 + j(0.02, 'c'), 2)} V`, true], ['空載 / 50%：Vout 52.0–52.15 V（下垂均流）', true], ['全程無保護動作、無異音', true]])),
+  TI('IN-02', 'Input Frequency Range', '頻率範圍', '47 / 50 / 60 / 63 Hz，230 Vac，100% 負載', '輸出正常', ['pfc_sw', 'dsp_pri'], ['acA', 'vout'],
+    () => CK('4 個頻率全部正常', [['47 Hz：Vout 正常、PF 0.998', true], ['50 Hz：正常', true], ['60 Hz：正常', true], ['63 Hz：Vout 正常、PF 0.997', true]])),
+  TI('IN-03', 'Max Input Current', '最大輸入電流', '200 Vac，100% 負載', '≤ 銘牌額定（24 A）', ['ac_inlet', 'fuse'], ['acA', 'iin'],
+    (D, j) => { const v = 23.1 + j(0.15) + (D.has('pfc') ? 0.3 : 0); return RES(`${fx(v)} Arms`, v <= 24, wAcPf(0.996, 3.2, v * 1.414, 200), '輸入電流最大的情況是最低輸入電壓、滿載。'); }),
+  TI('IN-04', 'Inrush Current – Cold Start', '湧浪電流，冷開機', '277 Vac，在 90° / 270° 相位上電，DUT 已靜置到 25 °C', '例：≤ 50 A peak', ['inrush', 'bulk'], ['acA', 'iin'],
+    (D, j) => { const v = (D.has('ntc') ? 96 : 36) + j(3); return RES(`${fx(v)} A peak`, v <= 50, wInrush(v, 50)); }),
+  TI('IN-05', 'Inrush Current – Hot Restart', '湧浪電流，熱重開', '滿載運轉後斷電 1 s 再上電', '例：≤ 50 A peak', ['inrush', 'bulk'], ['acA', 'iin'],
+    (D, j) => { const v = (D.has('ntc') ? 118 : 44) + j(3); return RES(`${fx(v)} A peak`, v <= 50, wInrush(v, 50), 'NTC 還是熱的、阻值很低，是湧浪電流最壞的情況；這時要靠旁路繼電器的時序。'); }),
+  TI('IN-06', 'Power Factor, PF', '功率因數', '200 / 230 / 277 Vac × 10 / 20 / 50 / 100% 負載', '例：≥ 0.95 @ 20%，≥ 0.99 @ ≥ 50%', ['pfc_sw', 'pfc_l', 'dsp_pri'], ['acA', 'iin'],
+    (D, j) => { const pf = (D.has('pfc') ? 0.912 : 0.975) + j(0.004); return RES(`PF ${fx(pf, 3)}（230 Vac · 20%）`, pf >= 0.95, wAcPf(pf, D.has('pfc') ? 14.6 : 6.4, 1.6), '20% 負載是最難的點；50% 以上 PF 都在 0.99 以上。'); }),
+  TI('IN-07', 'Input Current THD, iTHD', '輸入電流諧波', '同 IN-06', '例：≤ 10% @ 20%，≤ 5% @ ≥ 50%', ['pfc_sw', 'pfc_l', 'dsp_pri'], ['acA', 'iin'],
+    (D, j) => { const v = (D.has('pfc') ? 14.6 : 6.4) + j(0.5); return RES(`iTHD ${fx(v)}%（230 Vac · 20%）`, v <= 10, wAcPf(D.has('pfc') ? 0.912 : 0.975, v, 1.6)); }),
+  TI('IN-08', 'Brown-out / Brown-in', '欠壓關機 / 恢復', '兩路同時以 1 V/s 從 230 Vac 降到 150 Vac 再升回，滿載', '關機與恢復點在規格內、有遲滯、不反覆開關', ['dsp_pri', 'pfc_sw'], ['acA', 'acB', 'vout'],
+    (D, j) => { const off = 171 + j(1.2), on = 181.5 + j(1.2, 'n'); return RES(`關 ${fx(off)} Vac · 開 ${fx(on)} Vac`, off >= 165 && off <= 180 && on > off + 5, wBrown(off, on), `遲滯 ${fx(on - off)} V，所以輸入在門檻附近抖動時不會反覆開關機。`); }),
+  TI('IN-09', 'Input Over-voltage Tolerance', '輸入過壓耐受', '升到規格上限外（例 300 Vac）', '保護或耐受，不損壞', ['ac_inlet', 'emi', 'pfc_sw'], ['acA', 'vout'],
+    () => CK('耐受正常', [['300 Vac 60 s：PFC 進入輸入過壓保護，輸出關閉', true], ['降回 277 Vac：自動恢復輸出', true], ['無零件損壞', true]])),
+  TI('IN-10', 'Standby Input Power', '待機輸入功率', '主輸出關閉，只有輔助電源運作', '依規格（例 ≤ 12 W）', ['sb'], ['acA'],
+    (D, j) => { const v = 9.4 + j(0.4); return RES(`${fx(v)} W`, v <= 12, meter(v, 'W', null, 12, 0, 16)); }),
+
+  TI('ATS-01', 'Transfer on Feed A Loss, A→B', '主路失電切換', '230 Vac，100% 負載，Feed A 在 0° / 90° / 180° / 270° 斷電', '切換時間例 ≤ 10 ms；Vout 不掉出規格；PWOK 保持', ['ats', 'bulk'], ['acA', 'acB', 'relay', 'bulk', 'vout'],
+    (D, j) => { const tr = teTr(D, j), H = teH(D, j), vb = teBulkMin(tr, H);
+      return RES(vb ? `${fx(tr)} ms · Bulk 最低 ${fx(vb, 0)} V` : `${fx(tr)} ms · Vout 掉出規格`, tr <= 10 && vb, wAts(tr, H),
+        vb ? `保持餘裕 = 保持時間 ${fx(H)} ms − 切換時間 ${fx(tr)} ms = ${fx(H - tr)} ms。` : `切換時間 ${fx(tr)} ms 比保持時間 ${fx(H)} ms 長，Bulk 撐不到 B 路接上。`); }),
+  TI('ATS-02', 'Retransfer B→A', '回切', 'A 恢復供電後', '回切延遲在規格內；輸出不中斷；先斷後接', ['ats'], ['acA', 'acB', 'relay'],
+    (D, j) => { const v = 3.0 + j(0.1); return RES(`回切延遲 ${fx(v, 2)} s`, v >= 2 && v <= 5, meter(v, 's', 2, 5, 0, 6, 2), 'A 路要穩定一段時間才回切。先斷後接：K2 斷開 5 ms 後 K1 才吸合，兩路不會同時導通。'); }),
+  TI('ATS-03', 'Phase Difference Between Feeds', '兩路相位差', 'Feed A / B 相位差 0° / 120° / 180°，重複 ATS-01、02', '切換正常、無異常湧浪', ['ats', 'bulk'], ['acA', 'acB', 'relay', 'bulk'],
+    (D, j) => { const tr = teTr(D, j, 8.3), H = teH(D, j), vb = teBulkMin(tr, H);
+      return RES(vb ? `180° 最壞：${fx(tr)} ms · Bulk 最低 ${fx(vb, 0)} V` : `180°：${fx(tr)} ms · Vout 掉出規格`, tr <= 10 && vb, wAts(tr, H, Math.PI, 'A 斷電（B 相位差 180°）'), '兩路來自不同相時，繼電器兩側 L–L 可能到 480 V，切換時序更要小心。'); }),
+  TI('ATS-04', 'Under-voltage Detection Threshold', '欠壓偵測門檻', '主路以 1 V/s 緩降', '例：170–180 Vac 切換，有遲滯', ['ats'], ['acA', 'relay'],
+    (D, j) => { const v = 176 + j(1); return RES(`${fx(v)} Vac 切到 B`, v >= 170 && v <= 180, wProt({ sn: 'Feed A 電壓', su: 'Vac', a: 230, b: 150, trip: v, lo: 170, hi: 180, mode: 'switch', after: 'keep', c: '#ffb547', tdiv: '8 s/div' })); }),
+  TI('ATS-05', 'Over-voltage Detection', '過壓偵測', '主路升到過壓點', '例：295–310 Vac 切到備援路', ['ats'], ['acA', 'relay'],
+    (D, j) => { const v = 304 + j(1.5); return RES(`${fx(v)} Vac 切到 B`, v >= 295 && v <= 310, wProt({ sn: 'Feed A 電壓', su: 'Vac', a: 277, b: 320, trip: v, lo: 295, hi: 310, mode: 'switch', after: 'keep', c: '#ffb547', tdiv: '4 s/div' })); }),
+  TI('ATS-06', 'Abnormal Frequency Detection', '頻率異常', '主路 45 / 65 Hz', '依規格切換或維持', ['ats'], ['acA', 'relay'],
+    () => CK('符合規格', [['45 Hz：判定異常，切到 B', true], ['65 Hz：判定異常，切到 B', true], ['回到 50 Hz：延遲後回切 A', true]])),
+  TI('ATS-07', 'Short Dropout Immunity', '短暫中斷不誤動作', '主路中斷短於偵測時間（例 2 ms）', '不切換、輸出不中斷', ['ats', 'bulk'], ['acA', 'vout'],
+    () => CK('沒有誤動作', [['主路中斷 2 ms（短於 3 ms 偵測時間）', true], ['ATS 沒有切換，繼電器不動作', true], ['Vout 沒有擾動，PWOK 保持', true]])),
+  TI('ATS-08', 'Dual Feed Loss & Recovery', '兩路同時失電與恢復', '滿載', '輸出依保持時間關閉；恢復後回到優先路並重新開機', ['ats', 'bulk', 'dsp_pri'], ['acA', 'acB', 'vout'],
+    (D, j) => CK('行為正常', [[`兩路斷電：Vout 在 ${fx(teH(D, j))} ms 後關閉，PWOK 先拉低`, true], ['恢復：選擇 Feed A，約 2 s 重新開機', true], ['STATUS_INPUT 記錄兩路欠壓', true]])),
+  TI('ATS-09', 'Feed A Loss with Feed B Already Faulted', '備援路已異常時主路失電', '先斷 B，再斷 A', '不切到無電的 B，行為符合規格', ['ats'], ['acA', 'acB', 'relay'],
+    () => CK('符合規格', [['B 已斷電：ATS 停在 A，發出 Feed B 告警', true], ['A 再斷電：沒有切到無電的 B', true], ['輸出依保持時間關閉', true]])),
+  TI('ATS-10', 'Transfer at Various Loads', '不同負載', '10 / 50 / 100% 負載重複 ATS-01', '切換時間與輸出都符合', ['ats', 'bulk'], ['acA', 'acB', 'bulk', 'vout', 'load'],
+    (D, j) => { const tr = teTr(D, j), H = teH(D, j);
+      const rows = [[10, 10], [50, 2], [100, 1]].map(([p, k]) => { const ok = tr <= 10 && tr < H * k; return [`${p}% 負載：切換 ${fx(tr)} ms，${ok ? `Bulk 最低 ${fx(teBulkMin(tr, H * k), 0)} V` : (tr < H * k ? '切換太慢' : 'Vout 掉出規格')}`, ok]; });
+      const pass = rows.every(r => r[1]);
+      return RES(pass ? '3 個負載點都正常' : '100% 負載失敗', pass, wAts(tr, H), '滿載的保持餘裕最小，所以下面示波器顯示的是 100% 負載。'); }),
+  TI('ATS-11', 'Relay Endurance', '繼電器耐久', '連續切換 10,000 次', '無黏點、切換時間無劣化（≤ 10 ms）', ['ats'], ['relay'],
+    (D, j) => { const a = teTr(D, j), b = a + (D.has('relay') ? 0.9 : 0.3); return RES(`切換時間 ${fx(a)} → ${fx(b)} ms`, b <= 10, meter(b, 'ms', null, 10, 0, 18), '10,000 次後的切換時間，沒有黏點。'); }),
+  TI('ATS-12', 'ATS Status Reporting', 'ATS 狀態回報', '每次切換後讀 PMBus 狀態與事件紀錄', '使用中的 Feed、事件次數正確', ['ats', 'dsp_sec'], ['sig'],
+    () => CK('回報正確', [['使用中的 Feed：讀值和實際一致', true], ['切換事件計數：每次 +1', true], ['SMBAlert 在切換時拉低', true]])),
+
+  TI('EFF-01', 'Efficiency Curve', '效率曲線', '230 Vac，10–100% 每 10% 一點', '例：Titanium（230 V 內部冗餘）10% ≥ 90%、20% ≥ 94%、50% ≥ 96%、100% ≥ 91%', ['pfc_sw', 'llc_sw', 'resonant', 'sr', 'connector'], ['acA', 'vout', 'load'],
+    (D, j) => { const L = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100], base = [92.1, 95.2, 96.3, 96.8, 97.0, 96.9, 96.7, 96.4, 96.0, 95.6];
+      const ys = base.map((v, i) => v + j(0.06, 'e' + i) - (D.has('llc') ? 0.6 + L[i] / 100 * 1.2 : 0));
+      const ref = [[10, 90], [20, 94], [50, 96], [100, 91]], pass = ref.every(([x, y]) => ys[L.indexOf(x)] >= y);
+      return RES(`50%：${fx(ys[4], 2)}% · 100%：${fx(ys[9], 2)}%`, pass, { k: 'curve', xs: L, ys, ref, refStep: true, refName: '要求', xr: [0, 100], yr: [88, 98.5], xl: '負載 %', yl: '效率 %', fail: i => { const r = ref.find(p => p[0] === L[i]); return r && ys[i] < r[1]; } }); }),
+  TI('EFF-02', 'Fan Power Accounting', '風扇功耗的計入方式', '同 EFF-01，風扇由 PSU 自己供電', '依規格是否含風扇', ['fan'], ['fan'],
+    (D, j) => CK('含風扇計算', [['風扇由 PSU 內部供電，效率已扣掉風扇功耗', true], [`100% 負載風扇功耗 ${fx(38 + j(1), 0)} W（約 0.9%）`, true]])),
+  TI('EFF-03', 'Feed A / B Efficiency Matching', '兩路輸入一致性', 'Feed A 與 Feed B 分別供電，50% 與 100% 負載', '兩路效率差例 < 0.2%', ['ats', 'ac_inlet'], ['acA', 'acB'],
+    (D, j) => { const v = 0.05 + j(0.03); return RES(`差 ${fx(Math.abs(v), 2)}%`, Math.abs(v) < 0.2, meter(Math.abs(v), '%', null, 0.2, 0, 0.4, 2)); }),
+  TI('EFF-04', 'Efficiency vs. Ambient Temperature', '環境溫度影響', '25 °C 與 50 °C，50% 與 100% 負載', '記錄差異（例 ≤ 0.5%）', ['fan'], ['acA', 'fan'],
+    (D, j) => { const v = (D.has('fan') ? 0.84 : 0.32) + j(0.04); return RES(`100% 負載掉 ${fx(v, 2)}%`, v <= 0.5, meter(v, '%', null, 0.5, 0, 1.2, 2), '高溫時風扇轉快、零件導通電阻變大，效率會掉一點。'); }),
+
+  TI('OUT-01', 'Output Voltage Set Point', '輸出設定點', '230 Vac，50% 負載', '例：52.0 V ± 0.5%', ['dsp_sec', 'connector'], ['vout'],
+    (D, j) => { const v = 52.02 + j(0.03); return RES(`${fx(v, 3)} V`, v >= 51.74 && v <= 52.26, meter(v, 'V', 51.74, 52.26, 51.5, 52.5, 3)); }),
+  TI('OUT-02', 'Load Regulation', '負載調整率', '0–100% 負載', '例：± 1%，或符合下垂斜率', ['dsp_sec'], ['vout', 'load'],
+    (D, j) => { const v = -0.46 + j(0.04); return RES(`${fx(v, 2)}%（下垂）`, Math.abs(v) <= 1, meter(v, '%', -1, 1, -1.5, 1.5, 2), '下垂均流：滿載時故意讓電壓低一點，多台並聯就會自然分流。'); }),
+  TI('OUT-03', 'Line Regulation', '線調整率', '200–277 Vac，50% 負載', '例：± 0.5%', ['dsp_sec'], ['acA', 'vout'],
+    (D, j) => { const v = 0.03 + j(0.02); return RES(`${fx(v, 2)}%`, Math.abs(v) <= 0.5, meter(v, '%', -0.5, 0.5, -0.8, 0.8, 2)); }),
+  TI('OUT-04', 'Ripple & Noise', '漣波與雜訊', '20 MHz 頻寬，10 / 50 / 100% 負載 × 3 個輸入電壓', '例：≤ 1% Vout p-p（520 mV）', ['outcap', 'sr', 'llc_sw'], ['vout'],
+    (D, j) => { const v = (D.has('esr') ? 640 : 168) + j(15); return RES(`${fx(v, 0)} mVp-p`, v <= 520, wRipple(v, 520)); }),
+  TI('OUT-05', 'Dynamic Load Response', '動態響應', '50% ↔ 100% 階躍，slew 1 A/µs', '例：偏差 ≤ ± 5%（2.6 V）、恢復 ≤ 1 ms', ['outcap', 'dsp_sec', 'llc_sw'], ['vout', 'load'],
+    (D, j) => { const us = (D.has('esr') ? 3.15 : 1.42) + j(0.08), rec = (D.has('esr') ? 0.62 : 0.34) + j(0.02, 'r');
+      return RES(`跌落 ${fx(us, 2)} V · 恢復 ${fx(rec, 2)} ms`, us <= 2.6 && rec <= 1, wDyn(us, rec, 2.6)); }),
+  TI('OUT-06', 'Turn-on Timing', '開機時序', 'AC 上電到 Vout 建立', '延遲與上升時間在規格內，單調上升，過衝例 ≤ 5%', ['dsp_sec', 'oring'], ['acA', 'vout', 'sig'],
+    (D, j) => { const d = 1.82 + j(0.04), os = 1.1 + j(0.2, 'o'); return RES(`延遲 ${fx(d, 2)} s · 過衝 ${fx(os)}%`, d <= 3 && os <= 5, wTurnOn({ ctrl: 'AC', T: 3, tc: 0.15, ts: 0.15 + d, tr: 0.05, os, tp: 0.15 + d + 0.32, tdiv: '300 ms/div' })); }),
+  TI('OUT-07', 'Remote On / Off', '遠端開關機', 'PS_ON 或 PMBus OPERATION 控制', '時序符合規格（例 ≤ 100 ms）', ['dsp_sec'], ['sig', 'vout'],
+    (D, j) => { const d = 38 + j(3); return RES(`PS_ON → Vout ${fx(d, 0)} ms`, d <= 100, wTurnOn({ ctrl: 'PS_ON', T: 0.2, tc: 0.02, ts: 0.02 + d / 1000, tr: 0.018, os: 0.8, tp: 0.02 + d / 1000 + 0.06, tdiv: '20 ms/div' })); }),
+  TI('OUT-08', 'Turn-off Waveform', '關機波形', 'AC 移除或遠端關機', '單調下降、無反彈', ['dsp_sec', 'oring'], ['vout', 'sig'],
+    () => RES('單調下降，無反彈', true, wTurnOff(), 'PWOK 先拉低，Vout 才開始下降；下降過程不能有反彈，否則負載端可能誤判重新開機。')),
+  TI('OUT-09', 'Hold-up Time', '保持時間', '200 Vac，100% 負載，兩路同時在 0° 移除', '例：≥ 10 ms（算到 Vout 低於規格下限）', ['bulk'], ['acA', 'bulk', 'vout'],
+    (D, j) => { const H = (D.has('bulk') ? 7.0 : 11.5) + j(0.15); return RES(`${fx(H)} ms`, H >= 10, wHoldup(H, D.has('bulk') ? 0.55 : 1.6), '保持時間必須大於 ATS 切換時間，ATS 切換才不會讓輸出掉。'); }),
+  TI('OUT-10', 'PWOK / AC_OK Early Warning', '預警時間', '同 OUT-09', 'PWOK 在 Vout 掉出規格前例 ≥ 1 ms 拉低', ['dsp_pri', 'dsp_sec', 'bulk'], ['sig', 'vout', 'bulk'],
+    (D, j) => { const lead = (D.has('bulk') ? 0.55 : 1.6) + j(0.05), H = (D.has('bulk') ? 7.0 : 11.5); return RES(`提前 ${fx(lead, 2)} ms`, lead >= 1, wHoldup(H, lead), 'PWOK 是給伺服器的預警：收到後要在輸出掉之前把資料存好。'); }),
+  TI('OUT-11', 'Current Sharing', '均流', '4 台並聯，總負載 75%', '例：各台電流差 ≤ ± 5% 額定', ['dsp_sec', 'shunt'], ['load', 'psu2'],
+    (D, j) => { const e1 = D.has('shunt') ? -6.6 : 1.2 + j(0.3); const rows = [['PSU #1（DUT）', Math.abs(e1), 5, '%'], ['PSU #2', Math.abs(-0.8 + j(0.3, 'b')), 5, '%'], ['PSU #3', Math.abs(0.5 + j(0.3, 'c')), 5, '%'], ['PSU #4', Math.abs(-0.9 - e1 / 3 + j(0.2, 'd')), 5, '%']];
+      return RES(`DUT 偏差 ${fx(e1)}%`, rows.every(r => r[1] <= 5), { k: 'bars', rows, tdiv: '|偏差| / 上限' }); }),
+  TI('OUT-12', 'Hot Plug-in to Live Bus', '熱插入帶電匯流排', 'DUT 插入已由其他 PSU 供電的 52 V 匯流排', '匯流排擾動 ≤ 2.6 V、湧入電流受限（例 ≤ 20 A）、無打火', ['oring', 'connector'], ['bus', 'oring', 'psu2'],
+    (D, j) => { const pk = D.has('oring') ? 86 + j(3) : 11.5 + j(1), dip = D.has('oring') ? 3.4 : 0.5; return RES(`湧入 ${fx(pk)} A · 匯流排跌 ${fx(dip)} V`, pk <= 20 && dip <= 2.6, wHotplug(pk, dip, false)); }),
+  TI('OUT-13', 'Hot Removal', '熱拔除', '滿載中拔出一台', '其他 PSU 接手，匯流排不掉出規格', ['oring', 'connector'], ['bus', 'psu2'],
+    (D, j) => { const dip = 1.1 + j(0.1); return RES(`匯流排跌 ${fx(dip)} V`, dip <= 2.6, wHotplug(0, dip, true)); }),
+  TI('OUT-14', 'Reverse Current Blocking, ORing', '防逆流', 'DUT 關機，匯流排由其他電源維持', '逆向電流例 ≤ 0.5 A', ['oring'], ['oring', 'bus'],
+    (D, j) => { const v = D.has('oring') ? 18.4 + j(0.5) : 0.02; return RES(`${fx(v, 2)} A 逆流`, v <= 0.5, meter(v, 'A', null, 0.5, 0, 20, 2)); }),
+  TI('OUT-15', 'Capacitive Load Start-up', '容性負載啟動', '匯流排接最大允許電容（例 20,000 µF）', '正常啟動、不觸發 OCP', ['oring', 'dsp_sec'], ['vout', 'load'],
+    () => CK('正常啟動', [['20,000 µF：Vout 上升 46 ms，單調', true], ['沒有觸發 OCP、沒有 hiccup', true]])),
+  TI('OUT-16', 'Output Derating Curve', '降額曲線', '依輸入電壓與環境溫度', '輸出功率符合曲線', ['dsp_sec', 'fan'], ['load', 'fan'],
+    (D, j) => { const xs = DERATE.map(p => p[0]), ys = DERATE.map((p, i) => p[1] + 10 + j(6, 'd' + i)); return RES('符合降額曲線', true, { k: 'curve', xs, ys, ref: DERATE, refName: '規格曲線', xr: [20, 60], yr: [3000, 4700], xl: '環境溫度 °C', yl: '最大輸出 W', fail: () => false }); }),
+
+  TI('PRT-01', 'Over-current Protection, OCP', '過電流', '負載以 1 A/s 增加到保護', '例：動作點 110–130% 額定；hiccup 行為符合規格', ['shunt', 'dsp_sec'], ['load', 'shunt', 'vout'],
+    (D, j) => { const p = D.has('shunt') ? 108.2 : 118 + j(1); return RES(`${fx(p)}%（${fx(85 * p / 100)} A）`, p >= 110 && p <= 130, wProt({ sn: 'Iout', su: 'A', a: 80, b: 115, trip: 85 * p / 100, lo: 93.5, hi: 110.5, mode: 'hiccup', after: 'pulse', c: '#5ad1ff', tdiv: '4 s/div' }), '110% = 93.5 A，130% = 110.5 A。'); }),
+  TI('PRT-02', 'Short-circuit Protection, SCP', '輸出短路', '空載與滿載下短路，再移除', '無損壞；移除後依規格恢復', ['oring', 'dsp_sec', 'outcap'], ['vout', 'oring'],
+    () => CK('保護正常', [['空載短路：hiccup，峰值 142 A / 200 µs', true], ['滿載短路：ORing 在 5 µs 內關斷', true], ['移除短路：自動恢復', true], ['外觀與溫度正常', true]])),
+  TI('PRT-03', 'Over-voltage Protection, OVP', '過電壓', '以工程指令抬高回授', '例：55–58 V，且 < 60 V（SELV）', ['dsp_sec'], ['vout', 'sig'],
+    (D, j) => { const v = 56.6 + j(0.25); return RES(`${fx(v, 2)} V 鎖住`, v >= 55 && v <= 58, wProt({ sn: 'Vout', su: 'V', a: 52, b: 59, trip: v, lo: 55, hi: 58, mode: 'pwok', after: 'decay', c: '#2fd4b5', dec: 2, tdiv: '20 ms/div' })); }),
+  TI('PRT-04', 'Under-voltage Protection, UVP', '欠電壓', '輸出被拉低', '例：44–46 V 關機或告警', ['dsp_sec'], ['vout', 'sig'],
+    (D, j) => { const v = 45.2 + j(0.3); return RES(`${fx(v, 2)} V 動作`, v >= 44 && v <= 46, wProt({ sn: 'Vout', su: 'V', a: 52, b: 42, trip: v, lo: 44, hi: 46, mode: 'pwok', after: 'decay', c: '#2fd4b5', dec: 2, tdiv: '20 ms/div' })); }),
+  TI('PRT-05', 'Over-temperature Protection, OTP', '過溫', '堵住進風或升高溫箱', '依規格關機與恢復（例 110–125 °C）', ['dsp_sec', 'pfc_sw'], ['tcPfc', 'vout'],
+    (D, j) => { const v = 118 + j(1.5); return RES(`熱點 ${fx(v)} °C 關機`, v >= 110 && v <= 125, wProt({ sn: '熱點溫度（PFC 散熱片）', su: '°C', a: 85, b: 130, trip: v, lo: 110, hi: 125, mode: 'latch', after: 'cool', tdiv: '2 min/div' }), '降到約 100 °C 後自動恢復，記錄觸發溫度。'); }),
+  TI('PRT-06', 'Fan Failure Protection', '風扇失效', '卡住風扇或斷線', '告警、降額或關機（依規格）', ['fan', 'dsp_sec'], ['fan', 'sig'],
+    D => CK(OKF('保護正常', '轉速異常沒有告警'), [['風扇堵轉：2 s 內發出 FAN_FAULT，降額到 50%', true], [D.has('fan') ? '轉速只有命令值的 74%，但沒有發出 FAN_WARNING' : '轉速比命令值低 20% 時發出 FAN_WARNING', !D.has('fan')]])),
+  TI('PRT-07', 'Bus Back-feed Protection', '匯流排倒灌', 'DUT 未開機，匯流排外加 52 V', '無損壞、無逆流', ['oring'], ['bus', 'oring'],
+    D => CK(OKF('無逆流', '倒灌 18 A'), [[D.has('oring') ? '外加 52 V：逆流 18 A 流進 DUT 輸出電容' : '外加 52 V：逆流 < 10 mA', !D.has('oring')], ['DUT 無損壞', true]])),
+  TI('PRT-08', 'Protection Status Reporting', '保護狀態回報', '每個保護動作後讀 STATUS_WORD 與子狀態', '旗標正確、可清除', ['dsp_sec'], ['sig'],
+    () => CK('旗標正確', [['OCP → STATUS_IOUT bit 7', true], ['OVP → STATUS_VOUT bit 7', true], ['OTP → STATUS_TEMPERATURE bit 7', true], ['CLEAR_FAULTS 後旗標清除', true]])),
+
+  TI('THM-01', 'Component Temperature Rise', '零件溫升', '50 °C、200 Vac、100% 負載，熱穩定後讀值', '各零件 ≤ 額定 × 降額規則', ['pfc_sw', 'bulk', 'xfmr', 'sr', 'outcap', 'resonant', 'llc_sw'], ['tcPfc', 'tcBulk', 'tcX', 'tcSr', 'tcOut'],
+    (D, j) => { const f = D.has('fan') ? 14 : 0, l = D.has('llc') ? 16 : 0;
+      const rows = [['GaN 快臂 Q1', 96 + f + j(1, 'a'), 115, '°C'], ['Bulk 電容 C1', 84 + f + j(1, 'b'), 95, '°C'], ['諧振槽 CR2', 86 + f + l + j(1, 'c'), 100, '°C'], ['變壓器 T2', 106 + f + l + j(1, 'd'), 120, '°C'], ['SR MOSFET', 98 + f + j(1, 'e'), 115, '°C'], ['輸出電容', 80 + f + j(1, 'f'), 95, '°C']];
+      const bad = rows.filter(r => r[1] > r[2]);
+      return RES(bad.length ? `${bad.length} 個零件超溫` : `最小餘裕 ${fx(Math.min(...rows.map(r => r[2] - r[1])), 0)} °C`, !bad.length, { k: 'bars', rows, tdiv: '溫度 / 降額上限' }, '電解電容每降 10 °C 壽命約加倍，Bulk 和輸出電容的溫度直接決定產品壽命。'); }),
+  TI('THM-02', 'Thermal Derating Verification', '降額曲線驗證', '依規格溫度點與輸入電壓', '依曲線降額、不觸發 OTP', ['dsp_sec', 'fan'], ['tcPfc', 'load'],
+    (D, j) => { const xs = DERATE.map(p => p[0]), ys = DERATE.map((p, i) => p[1] + 8 + j(5, 'd' + i)); return RES('依曲線降額，沒有觸發 OTP', true, { k: 'curve', xs, ys, ref: DERATE, refName: '規格曲線', xr: [20, 60], yr: [3000, 4700], xl: '環境溫度 °C', yl: '最大輸出 W', fail: () => false }); }),
+  TI('THM-03', 'Fan Speed Control', '風扇轉速控制', '溫度與負載掃描', '轉速曲線符合設計（例 ± 10%）；PMBus 讀值一致', ['fan', 'dsp_sec'], ['fan', 'sig'],
+    (D, j) => { const xs = [25, 30, 35, 40, 45, 50, 55], ref = xs.map(t => [t, 9000 + (t - 25) * 480]); const k = D.has('fan') ? 0.75 : 1;
+      const ys = ref.map(([, y], i) => y * k + j(120, 'f' + i)); const fail = i => Math.abs(ys[i] / ref[i][1] - 1) > 0.1;
+      return RES(D.has('fan') ? '轉速比設計值低約 25%' : '轉速符合設計', !xs.some((_, i) => fail(i)), { k: 'curve', xs, ys, ref, refName: '設計值', xr: [20, 60], yr: [5000, 25000], xl: '環境溫度 °C', yl: '轉速 rpm', fail }); }),
+  TI('THM-04', 'Cold Start', '低溫啟動', '規格下限溫度（例 −5 °C）冷浸 4 h 後開機，滿載', '正常開機', ['inrush', 'bulk', 'dsp_pri'], ['acA', 'vout'],
+    () => CK('正常開機', [['−5 °C 冷浸 4 h', true], ['滿載開機：Vout 正常建立，無 hiccup', true]])),
+  TI('THM-05', 'Acoustic Noise', '噪音', '依規格距離、負載與溫度', '例：≤ 62 dBA', ['fan'], ['fan'],
+    (D, j) => { const v = (D.has('fan') ? 66.2 : 58.4) + j(0.4); return RES(`${fx(v)} dBA`, v <= 62, meter(v, 'dBA', null, 62, 45, 72)); }),
+  TI('THM-06', 'Burn-in', '燒機', '50 °C、滿載，72 h（模擬加速）', '無故障、燒機前後關鍵參數無漂移', ['bulk', 'outcap', 'fan'], ['tcBulk', 'vout'],
+    () => CK('燒機通過', [['72 h 無故障、無重啟', true], ['燒機前後 Vout、效率、漣波漂移 < 0.1%', true]])),
+  TI('THM-07', 'Power On/Off Cycling', '開關機循環', 'AC 開關與遠端開關機，次數依規格', '無故障、湧浪無劣化', ['inrush', 'ats'], ['acA', 'iin'],
+    D => CK(OKF('1,000 次無故障', '湧浪電流超標'), [['AC 開關 1,000 次：無故障', true], [D.has('ntc') ? '每次冷開機湧浪約 96 A，超過 50 A（繼電器與保險絲壽命會縮短）' : '湧浪電流沒有劣化', !D.has('ntc')]])),
+
+  TI('COM-01', 'PMBus Command Compliance', 'PMBus 指令相容性', '規格列出的每個指令逐一讀 / 寫', '回應正確；不支援的指令依規格回應', ['dsp_sec'], ['sig'],
+    () => CK('相容', [['46 個指令逐一讀寫：回應正確', true], ['不支援的指令：NACK，STATUS_CML 設定', true]])),
+  TI('COM-02', 'Telemetry Accuracy', '讀值精度', 'READ_VIN / IIN / PIN / VOUT / IOUT / POUT，多個負載點與功率分析儀比對', '例：電壓 ± 1%、電流與功率 ± 2%', ['dsp_sec', 'shunt', 'dsp_pri'], ['sig', 'shunt', 'acA'],
+    (D, j) => { const s = D.has('shunt') ? 9 : 0; const rows = [['READ_VIN', Math.abs(0.4 + j(0.1, 'a')), 1, '%'], ['READ_IIN', Math.abs(1.1 + j(0.2, 'b')), 2, '%'], ['READ_PIN', Math.abs(1.3 + j(0.2, 'c')), 2, '%'], ['READ_VOUT', Math.abs(0.2 + j(0.05, 'd')), 1, '%'], ['READ_IOUT', Math.abs(1.2 + s + j(0.2, 'e')), 2, '%'], ['READ_POUT', Math.abs(1.4 + s + j(0.2, 'f')), 2, '%']];
+      return RES(s ? 'IOUT / POUT 偏高約 10%' : '全部在誤差內', rows.every(r => r[1] <= r[2]), { k: 'bars', rows, tdiv: '|誤差| / 上限（50% 負載）' }); }),
+  TI('COM-03', 'PEC & Error Handling', 'PEC 與錯誤處理', '送錯誤 PEC、不存在的指令', 'NACK，STATUS_CML 正確設定', ['dsp_sec'], ['sig'],
+    () => CK('處理正確', [['錯誤 PEC：NACK，STATUS_CML bit 5', true], ['不存在的指令：NACK，STATUS_CML bit 7', true]])),
+  TI('COM-04', 'Bus Speed', '通訊速度', '100 / 400 kHz（1 MHz 若支援）', '正常', ['dsp_sec'], ['sig'],
+    () => CK('正常', [['100 kHz：正常', true], ['400 kHz：正常', true], ['1 MHz：規格不支援（不需測）', true]])),
+  TI('COM-05', 'Status & Alerts', '狀態與告警', '觸發各保護與 ATS 切換', 'STATUS_* 與 SMBAlert 正確', ['dsp_sec', 'ats'], ['sig'],
+    () => CK('正確', [['每種保護與 ATS 切換都拉低 SMBAlert', true], ['ARA 回應的位址正確（0x58）', true]])),
+  TI('COM-06', 'Black Box Logging', '黑盒子紀錄', '觸發故障後讀紀錄', '時間、類型、數值正確', ['dsp_sec'], ['sig'],
+    () => CK('紀錄正確', [['最近 16 筆故障：時間、類型、當時數值都正確', true], ['斷電後紀錄保留', true]])),
+  TI('COM-07', 'FW Update via PMBus', 'FW 更新，PMBus', '依序更新 ATS → Primary → Secondary', '版本讀回正確、更新後功能回歸通過', ['ats', 'dsp_pri', 'dsp_sec', 'isolator'], ['sig'],
+    () => CK('更新成功', [['ATS 1.1.4 → 1.2.0', true], ['Primary 1.4.2 → 1.5.0', true], ['Secondary 2.0.7 → 2.1.0', true], ['更新後回歸測試通過', true]], '上方的「FW 更新」模式可以一步步看 PMBus 更新的每一筆交易。')),
+  TI('COM-08', 'FW Update via CAN', 'FW 更新，CAN', '同 COM-07', '同 COM-07', ['ats', 'dsp_pri', 'dsp_sec', 'isolator'], ['sig'],
+    () => CK('更新成功', [['UDS 0x34 / 0x36 / 0x37 流程正確', true], ['三顆 MCU 版本讀回正確', true]], '「FW 更新」模式切到 CAN，可以看到實際的 CAN 訊框。')),
+  TI('COM-09', 'Power Loss During Update', '更新中斷電', '每顆 MCU 在傳輸約 50% 時中斷待機電源', 'Bootloader 保留、不變磚、可重新更新', ['sb', 'dsp_pri', 'dsp_sec', 'ats'], ['sig'],
+    () => CK('沒有變磚', [['ATS / Primary / Secondary 各斷電一次', true], ['重新上電停在 Bootloader，可以重新更新', true]])),
+  TI('COM-10', 'Corrupted Image Rejection', '錯誤映像', '送 CRC 錯誤或不相容的映像', '拒絕並維持可恢復狀態', ['dsp_sec'], ['sig'],
+    () => CK('正確拒絕', [['CRC 錯誤的映像：驗證失敗，拒絕啟用', true], ['其他機種的映像：型號不符，拒絕', true]])),
+  TI('COM-11', 'Version Compatibility & Downgrade', '版本組合與降版', '降回前一版；三顆 MCU 不同版本組合', '依規格允許或拒絕', ['dsp_sec'], ['sig'],
+    () => CK('符合規格', [['降回前一版：允許', true], ['不相容的版本組合：拒絕並回報', true]])),
+  TI('COM-12', 'Output Behavior During Update', '更新期間的輸出行為', '冗餘系統中更新', '主輸出依規格關閉或維持，匯流排不受影響', ['dsp_sec', 'oring'], ['sig', 'bus'],
+    () => CK('符合規格', [['更新 Secondary 時主輸出關閉，其他 PSU 接手', true], ['匯流排擾動 < 1 V', true]])),
+
+  TI('SAF-01', 'Hi-pot: Primary – Secondary', '耐壓：一次側–二次側', '加強絕緣，3000 Vac，60 s', '不崩潰（漏電流 < 10 mA）', ['xfmr', 'isolator', 'sb', 'pcb'], ['hipotP', 'hipotS'],
+    (D, j) => { const br = D.has('xfmr') ? 41 : null; return RES(br ? `${br} s 崩潰` : `60 s 通過 · ${fx(1.4 + j(0.1))} mA`, !br, wHipot(3000, br)); }),
+  TI('SAF-02', 'Hi-pot: Primary – Chassis', '耐壓：一次側–外殼', '基本絕緣，1500 Vac，60 s', '不崩潰', ['emi', 'housing'], ['hipotP', 'chassis'],
+    (D, j) => RES(`60 s 通過 · ${fx(1.1 + j(0.1))} mA`, true, wHipot(1500, null))),
+  TI('SAF-03', 'Insulation Resistance', '絕緣電阻', '500 Vdc，耐壓前後各量一次', '例：≥ 100 MΩ', ['xfmr', 'pcb'], ['hipotP', 'hipotS'],
+    D => CK(OKF('> 1 GΩ', '一次側–二次側 3.2 MΩ'), [[`一次側–二次側：${D.has('xfmr') ? '3.2 MΩ' : '> 1 GΩ'}`, !D.has('xfmr')], ['一次側–外殼：> 1 GΩ', true]])),
+  TI('SAF-04', 'Ground Continuity', '接地連續性', '依 IEC 62368-1 保護接地測試電流與時間', '例：≤ 0.1 Ω', ['housing', 'ac_inlet'], ['pe', 'chassis'],
+    (D, j) => { const v = 0.032 + j(0.004); return RES(`${fx(v, 3)} Ω（兩個插座都量）`, v <= 0.1, meter(v, 'Ω', null, 0.1, 0, 0.15, 3)); }),
+  TI('SAF-05', 'Touch Current', '接觸電流', '最高額定輸入 × 1.1，Feed A、B 同時接上', '例：≤ 3.5 mA', ['emi'], ['acA', 'acB', 'chassis'],
+    (D, j) => { const v = (D.has('ycap') ? 0.62 : 2.15) + j(0.05); return RES(`${fx(v, 2)} mA`, v <= 3.5, meter(v, 'mA', null, 3.5, 0, 5, 2), D.has('ycap') ? '接觸電流比平常低很多，Y 電容的漏電流不見了，值得懷疑。' : '兩路各有 Y 電容，漏電流會相加，所以要兩路同時接上量。'); }),
+  TI('SAF-06', 'Abnormal / Single-fault Test', '異常 / 單一故障', '依 DFMEA 選定元件短路 / 開路、風扇堵轉、過載', '不起火、不冒煙，絕緣仍符合', ['pfc_sw', 'fan', 'fuse'], ['acA', 'fan'],
+    () => CK('符合', [['PFC 開關短路：保險絲熔斷，無起火', true], ['風扇堵轉：OTP 關機', true], ['輸出過載：OCP 動作', true]])),
+  TI('SAF-07', 'Safety Temperature Rise', '安規溫升', '依標準條件', '可觸及表面與絕緣材料溫度 ≤ 限值', ['housing', 'xfmr'], ['chassis', 'tcX'],
+    () => CK('符合', [['把手與外殼：≤ 限值', true], ['變壓器絕緣系統：在 Class B 限值內', true]])),
+  TI('SAF-08', 'Creepage & Clearance', '爬電距離與電氣間隙', '檢查 PCB、變壓器、ATS 繼電器兩側', '符合標準表格', ['pcb', 'xfmr', 'ats'], ['relay'],
+    () => CK('符合', [['隔離帶開槽：加強絕緣距離足夠', true], ['ATS 繼電器兩側以 L–L 480 V 評估：足夠', true]])),
+  TI('SAF-09', 'Marking & Instructions', '標示與說明', '銘牌、雙電源警告標示', '符合標準', ['housing'], ['chassis'],
+    () => CK('符合', [['銘牌額定與實測一致', true], ['雙電源警告：「拔除所有電源線才會斷電」', true]])),
+
+  TI('EMC-01', 'Conducted Emission, CE', '傳導發射', 'CISPR 32 Class A，230 / 277 Vac，多個負載', '低於限值並留餘裕（例 ≥ 3 dB）', ['emi', 'pfc_sw'], ['lisn', 'acA'],
+    (D, j) => { const m = (D.has('ycap') ? -4.6 : 5.8) + j(0.3); return RES(m >= 0 ? `最小餘裕 ${fx(m)} dB` : `超標 ${fx(-m)} dB`, m >= 3, { k: 'spec', band: 'CE', margin: m, boost: D.has('ycap') ? 10 : 0, tdiv: 'QP · 150 kHz–30 MHz · dBµV' }); }),
+  TI('EMC-02', 'Radiated Emission, RE', '輻射發射', 'CISPR 32 Class A', '低於限值並留餘裕', ['emi', 'housing', 'pfc_sw'], ['acA'],
+    (D, j) => { const m = 4.2 + j(0.3); return RES(`最小餘裕 ${fx(m)} dB`, m >= 3, { k: 'spec', band: 'RE', margin: m, boost: 0, tdiv: 'QP · 30 MHz–1 GHz · 10 m · dBµV/m' }); }),
+  TI('EMC-03', 'Harmonic Current', '諧波電流', 'IEC 61000-3-12', '符合限值', ['pfc_sw', 'pfc_l', 'dsp_pri'], ['acA'],
+    (D, j) => { const p = D.has('pfc') ? 1 : 0; const rows = [['3 次', 4.1 + p * 16 + j(0.2, 'a'), 21.6, '%'], ['5 次', 2.2 + p * 10.2 + j(0.2, 'b'), 10.7, '%'], ['7 次', 1.4 + p * 4.1 + j(0.1, 'c'), 7.2, '%'], ['9 次', 0.9 + p * 2.2 + j(0.1, 'd'), 3.8, '%'], ['11 次', 0.6 + p * 1.6 + j(0.1, 'e'), 3.1, '%'], ['13 次', 0.4 + p * 1.1 + j(0.1, 'f'), 2.0, '%']];
+      return RES(p ? '5 次諧波超標' : '全部符合', rows.every(r => r[1] <= r[2]), { k: 'bars', rows, tdiv: '諧波電流（% 基本波）/ 限值' }); }),
+  TI('EMC-04', 'Voltage Fluctuation & Flicker', '電壓變動與閃爍', 'IEC 61000-3-11', '符合限值', ['inrush', 'pfc_sw'], ['acA'],
+    () => CK('符合', [['Pst < 1.0、Plt < 0.65', true], ['dmax < 4%（開機湧浪）', true]])),
+  TI('EMC-05', 'ESD', '靜電放電', 'IEC 61000-4-2，±4 kV 接觸 / ±8 kV 空氣', '依 EN 55035', ['housing', 'connector'], ['chassis', 'sig'],
+    () => CK('Criterion A', [['前面板、把手、連接器周圍各點放電', true], ['Vout、PWOK、PMBus 都沒有異常', true]])),
+  TI('EMC-06', 'Radiated Immunity, RS', '輻射抗擾', 'IEC 61000-4-3', '依 EN 55035', ['housing', 'dsp_sec'], ['sig'],
+    () => CK('Criterion A', [['80 MHz–6 GHz，3 V/m：無異常', true]])),
+  TI('EMC-07', 'EFT / Burst', '快速暫態脈衝', 'IEC 61000-4-4，AC 埠 ±1 kV', '依 EN 55035', ['emi'], ['acA'],
+    () => CK('Criterion A', [['Feed A、B 各打 ±1 kV：無異常', true], ['ATS 沒有誤切換', true]])),
+  TI('EMC-08', 'Surge', '雷擊突波', 'IEC 61000-4-5，±1 kV 線–線、±2 kV 線–地', '依 EN 55035', ['emi', 'ats', 'fuse'], ['acA', 'acB'],
+    () => CK('Criterion A', [['兩路各打 0° / 90° / 180° / 270°', true], ['ATS 沒有誤切換、保險絲沒有熔斷', true]])),
+  TI('EMC-09', 'Conducted Immunity, CS', '傳導抗擾', 'IEC 61000-4-6', '依 EN 55035', ['emi', 'dsp_sec'], ['lisn', 'sig'],
+    D => CK(OKF('Criterion A', '不符：PMBus 出錯'), [['150 kHz–80 MHz，3 V：Vout 正常', true], [D.has('ycap') ? '1–5 MHz 注入時 PMBus 出現 PEC 錯誤，STATUS_CML 被設定' : 'PMBus 通訊無錯誤', !D.has('ycap')]])),
+  TI('EMC-10', 'Voltage Dips & Interruptions', '電壓驟降與中斷', 'IEC 61000-4-34', '依 EN 55035', ['bulk', 'ats'], ['acA', 'acB', 'vout'],
+    D => CK(OKF('符合', '不符'), [[D.has('bulk') ? '兩路 0% / 10 ms：輸出中斷（保持時間不足）' : '兩路 0% / 10 ms：輸出不中斷', !D.has('bulk')], ['兩路 70% / 500 ms：輸出正常', true], [D.has('relay') ? '單路中斷 5 s：ATS 切換太慢，輸出中斷' : '單路中斷 5 s：ATS 切換，輸出不中斷', !D.has('relay')]])),
+
+  TI('SYS-01', 'Single Feed Loss', '單路斷電', '機櫃配置，滿載，只斷 Feed A', 'ATS 切換，匯流排維持 52 V，BBU 不放電', ['ats', 'bulk'], ['acA', 'acB', 'bus', 'bbu'],
+    (D, j) => { const tr = teTr(D, j), H = teH(D, j), bad = tr >= H; return RES(bad ? 'PSU 輸出中斷，BBU 被迫放電' : '匯流排維持 52 V，BBU 沒有放電', !bad, wBbu('single', tr, H)); }),
+  TI('SYS-02', 'Dual Feed Loss → BBU Takeover', '兩路斷電 → BBU 接手', '同上，兩路同時斷', '匯流排最低電壓在規格內、伺服器不斷電', ['bulk', 'oring', 'connector'], ['acA', 'acB', 'bus', 'bbu'],
+    (D, j) => { const H = teH(D, j); return RES(`BBU 在 ${fx(H)} ms 接手 · 匯流排最低 49.7 V`, true, wBbu('dual', 0, H), '只要匯流排沒掉到伺服器的下限，BBU 接手前的保持時間長短都可以接受。'); }),
+  TI('SYS-03', 'AC Recovery → PSU Re-engage', 'AC 恢復 → PSU 接回', 'BBU 放電中恢復 AC', 'PSU 接回時匯流排無過衝或跌落；BBU 停止放電並開始充電', ['dsp_sec', 'oring'], ['bus', 'bbu'],
+    () => RES('平順接回', true, wBbu('recover'))),
+  TI('SYS-04', 'PSU Behavior While BBU Holds the Bus', 'BBU 維持匯流排時 PSU 的行為', 'PSU 未開機或正在啟動', '不逆流、不誤動作', ['oring'], ['bus', 'bbu', 'oring'],
+    D => CK(OKF('不逆流', '逆流到 PSU'), [[D.has('oring') ? 'PSU 未開機：BBU 電流倒灌 18 A 進 PSU' : 'PSU 未開機：沒有逆流', !D.has('oring')], ['PSU 啟動中：ORing 在 Vout > Vbus 才導通', !D.has('oring')]])),
+  TI('SYS-05', 'Current Sharing vs. BBU Charging', '均流與 BBU 充電互動', 'BBU 充電時，4 台 PSU 並聯', '均流精度仍符合 OUT-11', ['dsp_sec', 'shunt'], ['psu2', 'bbu'],
+    (D, j) => { const e1 = D.has('shunt') ? -6.9 : 1.4 + j(0.3); const rows = [['PSU #1（DUT）', Math.abs(e1), 5, '%'], ['PSU #2', Math.abs(-1.1 + j(0.3, 'b')), 5, '%'], ['PSU #3', Math.abs(0.6 + j(0.3, 'c')), 5, '%'], ['PSU #4', Math.abs(-0.9 - e1 / 3 + j(0.2, 'd')), 5, '%']];
+      return RES(`DUT 偏差 ${fx(e1)}%`, rows.every(r => r[1] <= 5), { k: 'bars', rows, tdiv: '|偏差| / 上限（BBU 充電 6 A）' }); }),
+];
+
+/* ---------- TE bench state ---------- */
+let TE = null, teDownloads = null;
+// inside claude.ai the report is saved through the viewer's downloads capability; elsewhere (GitHub Pages) a plain blob link
+if (window.claude && window.claude.use) window.claude.use('downloads').then(d => { teDownloads = d; }, () => {});
+const TE_STORE = 'psu-te-dc52-v1';
+const tst = { cur: 's1', cat: 'IN', sel: null, part: null, run: null, queue: [], diag: null, msg: null, view: 'item', S: {} };
+function teHash(str, seed = 2166136261) { let h = seed >>> 0; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function teRand(seed, key) { return (teHash(key, seed) % 20001) / 10000 - 1; }
+function teSample(k = tst.cur) { return TE_SAMPLES.find(s => s.k === k); }
+function teNewS(k) {
+  const smp = teSample(k);
+  const d = smp.d ? smp.d.slice() : Object.keys(TE_DEFECTS).sort(() => Math.random() - 0.5).slice(0, Math.random() < 0.5 ? 2 : 3);
+  return { d, seed: k === 'blind' ? (Math.random() * 4e9) >>> 0 : teHash(k), res: {}, found: [], fixed: [], score: 0, tries: {}, revealed: false, bonus: false };
+}
+function teS(k = tst.cur) { return tst.S[k] || (tst.S[k] = teNewS(k)); }
+function teActive(S = teS()) { return new Set(S.d.filter(x => !S.fixed.includes(x))); }
+function teMeasure(it, D, S = teS()) { return it.m(D, (a, k = '') => a * teRand(S.seed, it.id + k)); }
+// a FAIL's causes: active defects that fail this item on their own
+function teCauses(id, S = teS()) { const it = TE.byId[id]; return [...teActive(S)].filter(d => !teMeasure(it, new Set([d]), S).pass); }
+function teSave() {
+  try {
+    const o = {};
+    for (const k in tst.S) { const S = tst.S[k]; o[k] = { d: S.d, seed: S.seed, ids: Object.keys(S.res), found: S.found, fixed: S.fixed, score: S.score, tries: S.tries, revealed: S.revealed, bonus: S.bonus }; }
+    localStorage.setItem(TE_STORE, JSON.stringify({ cur: tst.cur, S: o }));
+  } catch (e) {}
+}
+function teLoad() {
+  try {
+    const o = JSON.parse(localStorage.getItem(TE_STORE) || 'null'); if (!o || !o.S) return;
+    for (const k in o.S) {
+      const smp = teSample(k), s = o.S[k]; if (!smp) continue;
+      const d = smp.d ? smp.d.slice() : (s.d || []).filter(x => TE_DEFECTS[x]);
+      const S = { d, seed: smp.d ? teHash(k) : (s.seed >>> 0), res: {}, found: (s.found || []).filter(x => d.includes(x)), fixed: (s.fixed || []).filter(x => d.includes(x)), score: +s.score || 0, tries: s.tries || {}, revealed: !!s.revealed, bonus: !!s.bonus };
+      tst.S[k] = S;
+      const D = teActive(S);
+      for (const id of s.ids || []) { const it = TE.byId[id]; if (it) S.res[id] = teMeasure(it, D, S); }
+    }
+    if (teSample(o.cur)) tst.cur = o.cur;
+  } catch (e) {}
+}
+function teInit() {
+  if (TE) return;
+  TE = { items: TE_ITEMS_52, byId: Object.fromEntries(TE_ITEMS_52.map(it => [it.id, it])) };
+  teLoad();
+}
+
+/* ---------- TE bench: running, diagnosis, repair ---------- */
+function teStartRun(id, quick) {
+  const S = teS();
+  tst.run = { id, k: tst.cur, quick, t0: performance.now(), dur: quick ? 220 : 1100 + Math.random() * 400, r: teMeasure(TE.byId[id], teActive(S), S) };
+  if (id === tst.sel) { tst.msg = null; tst.diag = null; renderTestInfo(); updateScopeHead(); }
+}
+function teRunCat() {
+  if (tst.run || tst.queue.length) return;
+  const ids = teList().map(it => it.id).filter(id => !teS().res[id]);
+  if (!ids.length) { toast('這一組都量過了；要重量單一測項，請在右邊按「重新量測」'); return; }
+  tst.queue = ids; teStartRun(tst.queue.shift(), true);
+}
+function teTick(now) {
+  if (!tst.run || now - tst.run.t0 < tst.run.dur) return;
+  const r = tst.run; tst.run = null;
+  const S = tst.S[r.k];
+  if (S) { S.res[r.id] = r.r; teSave(); teCheckDone(S); }
+  if (tst.queue.length && r.k === tst.cur) teStartRun(tst.queue.shift(), true);
+  else if (r.quick) {
+    tst.queue = [];
+    const list = teList(), fails = list.filter(it => S.res[it.id] && !S.res[it.id].pass).length;
+    toast(fails ? `量完了：${fails} 項 FAIL。點 FAIL 的測項，再找出故障零件` : '量完了：這一組全部 PASS');
+  }
+  if (r.id === tst.sel) { renderTestInfo(); updateScopeHead(); }
+  renderPanel();
+}
+function teCheckDone(S) {
+  if (S.bonus || S.revealed) return;
+  const all = TE.items.every(it => S.res[it.id] && S.res[it.id].pass), fixed = S.d.every(d => S.fixed.includes(d));
+  if (all && fixed) { S.bonus = true; S.score += 50; teSave(); toast(`${teSample().n}：${TE.items.length} 項全部 PASS，可以放行！ +50 分`, 5000); }
+}
+function teSelect(id, fly = true) {
+  const it = TE.byId[id]; if (!it) return;
+  if (tst.sel !== id) { tst.msg = null; tst.diag = null; }
+  tst.sel = id; tst.view = 'item';
+  if (!tst.part) tst.cat = it.cat;
+  selIds = new Set(it.parts); currentId = null;
+  teShowProbes(it.pr);
+  renderTestInfo(); updateScopeHead(); renderPanel();
+  if (fly) focusBox(compBox(it.parts), 13, 30);
+}
+function teClickPart(id) {
+  if (tst.diag) { teDiagnose(id); return; }
+  tst.part = id;
+  const n = TE.items.filter(it => it.parts.includes(id)).length;
+  flashes[id] = { color: new THREE.Color(ZONES[DEF[id].zone].color), until: time + 0.9 };
+  renderPanel(); openPanelSheet();
+  toast(n ? `${DEF[id].name}：左邊列出 ${n} 個相關測項` : `${DEF[id].name}：測試計畫裡沒有直接量它的測項`);
+}
+function teDiagnose(part) {
+  const id = tst.diag, S = teS(); if (!id) return;
+  const causes = teCauses(id), hit = causes.filter(d => TE_DEFECTS[d].parts.includes(part));
+  if (hit.length) {
+    const tries = S.tries[id] || 0, pts = tries === 0 ? 30 : tries === 1 ? 15 : 5;
+    const fresh = hit.filter(d => !S.found.includes(d)); fresh.forEach(d => S.found.push(d));
+    const gain = S.revealed ? 0 : pts * fresh.length; S.score += gain;
+    flashes[part] = { color: new THREE.Color('#3ddc84'), until: time + 1.6 };
+    tst.msg = { id, ok: true, ds: hit, gain }; tst.diag = null;
+    if (S.d.every(d => S.found.includes(d)) && fresh.length) setTimeout(() => toast(`這台樣品的 ${S.d.length} 個問題都找到了！換料後重測，全部 PASS 就能放行`, 4500), 400);
+  } else {
+    S.tries[id] = (S.tries[id] || 0) + 1;
+    flashes[part] = { color: new THREE.Color('#ff4d5e'), until: time + 1.2 };
+    tst.msg = { id, ok: false, part, hint: causes.length ? TE_DEFECTS[causes[0]].hint : '' };
+  }
+  teSave(); renderTestInfo(); renderPanel(); applyLabels();
+}
+function teFix(ds) {
+  const S = teS();
+  // only the FAILs this swap could cure need a retest; other FAILs keep their result
+  const stale = Object.keys(S.res).filter(id => !S.res[id].pass && teCauses(id, S).some(d => ds.includes(d)));
+  ds.forEach(d => { if (!S.fixed.includes(d)) S.fixed.push(d); });
+  stale.forEach(id => delete S.res[id]);
+  const n = stale.length;
+  tst.msg = null; tst.diag = null; teSave();
+  toast(`已更換：${[...new Set(ds.flatMap(d => TE_DEFECTS[d].parts.slice(0, 1)))].map(p => DEF[p].name).join('、')}。${n} 個 FAIL 的測項要重測`, 4200);
+  renderTestInfo(); renderPanel(); updateScopeHead();
+}
+function teShowProbes(keys) {
+  for (const k in teProbe) { const on = mode === 'test' && keys.includes(k); teProbe[k].m.visible = on; teProbe[k].lo.visible = on; }
+}
+
+/* ---------- TE bench: panel & card ---------- */
+function teList() { return tst.part ? TE.items.filter(it => it.parts.includes(tst.part)) : TE.items.filter(it => it.cat === tst.cat); }
+function teBadge(S, id) {
+  if (tst.run && tst.run.id === id && tst.run.k === tst.cur) return '<em class="res run">…</em>';
+  const r = S.res[id]; if (!r) return '<em class="res">–</em>';
+  return r.pass ? '<em class="res pass">PASS</em>' : '<em class="res fail">FAIL</em>';
+}
+function testPanelHTML() {
+  const S = teS(), smp = teSample(), items = TE.items;
+  const done = items.filter(it => S.res[it.id]), fails = done.filter(it => !S.res[it.id].pass);
+  const blindHide = !smp.d && !S.revealed;
+  const list = teList();
+  const chips = Object.keys(TE_CATS).map(c => {
+    const ci = items.filter(it => it.cat === c), f = ci.some(it => S.res[it.id] && !S.res[it.id].pass), dn = ci.filter(it => S.res[it.id]).length;
+    return `<button data-cat="${c}" class="${!tst.part && tst.cat === c ? 'on' : ''}" style="--cc:${TE_CATS[c].c}"><b>${c}</b><i>${dn}/${ci.length}</i>${f ? '<span class="fdot"></span>' : ''}</button>`;
+  }).join('');
+  const head = tst.part
+    ? `<p class="note">和 <b>${DEF[tst.part].name}</b> 有關的測項（${list.length} 個） <button class="linkb" id="tPartX">清除篩選</button></p>`
+    : `<p class="chain-t">${TE_CATS[tst.cat].n} · ${TE_CATS[tst.cat].en}</p>`;
+  return `<div><h3>TE 測試台</h3><p class="lead">照測試計畫量測這台 4.4 kW / 52 V PSU。選一台樣品，執行測項；遇到 FAIL 就在 3D 模型上點出造成問題的零件，換料後重測。</p></div>
+    <label class="field"><span>DUT 樣品</span><select id="tSample">${TE_SAMPLES.map(s => `<option value="${s.k}" ${s.k === tst.cur ? 'selected' : ''}>${s.n}</option>`).join('')}</select></label>
+    <p class="note">${smp.desc || (smp.d ? `這台有 <b>${smp.d.length}</b> 個問題，找出來、換料，讓 ${items.length} 項全部 PASS。` : '問題數量不公開，量完找出全部問題再按「公布答案」對答案。')}</p>
+    <div class="prog"><div class="bar"><i style="width:${done.length / items.length * 100}%"></i></div><span class="mono">${done.length} / ${items.length}</span></div>
+    <dl class="readouts">
+      <div><dt>PASS</dt><dd class="good">${done.length - fails.length}</dd></div><div><dt>FAIL</dt><dd class="${fails.length ? 'badc' : ''}">${fails.length}</dd></div>
+      <div><dt>找到的問題</dt><dd>${S.found.length} / ${blindHide ? '?' : S.d.length}</dd></div><div><dt>分數</dt><dd class="warn">${S.score}</dd></div>
+    </dl>
+    <div class="chips">${chips}</div>
+    ${head}
+    <ul class="tlist">${list.map(it => `<li><button data-test="${it.id}" class="${tst.sel === it.id ? 'on' : ''}"><span class="tid">${it.id}</span><span><b>${it.en}</b><small>${it.zh}</small></span>${teBadge(S, it.id)}</button></li>`).join('')}</ul>
+    <div class="scn"><button class="btn primary" id="tRunCat" ${tst.run || tst.queue.length ? 'disabled' : ''}>量完這一組</button><button class="btn" id="tReport">測試報告</button></div>
+    <div class="scn"><button class="btn" id="tResetS">重新開始這台</button>${smp.d ? '' : `<button class="btn" id="tReveal" ${S.revealed ? 'disabled' : ''}>公布答案</button>`}</div>
+    <p class="note">小技巧：在 3D 模型上點任何零件，會列出和它有關的測項。</p>`;
+}
+function testInfoHTML() {
+  const it = TE.byId[tst.sel], C = TE_CATS[it.cat], S = teS(), r = S.res[it.id];
+  const running = tst.run && tst.run.id === it.id && tst.run.k === tst.cur, i = TE.items.indexOf(it);
+  let res = '', diag = '';
+  if (running) res = '<div class="tres"><span>量測中…看下方示波器</span><span class="verdict warn">RUN</span></div>';
+  else if (r) {
+    res = `<div class="tres ${r.pass ? 'pass' : 'fail'}"><span class="mono">${r.s}</span><span class="verdict ${r.pass ? 'good' : 'badc'}">${r.pass ? 'PASS' : 'FAIL'}</span></div>${r.note ? `<p class="note">${r.note}</p>` : ''}`;
+    if (!r.pass) {
+      const causes = teCauses(it.id), m = tst.msg && tst.msg.id === it.id ? tst.msg : null;
+      const known = causes.filter(d => S.found.includes(d));
+      if (m && m.ok) diag = `<div class="fb ok"><b>找到了：${m.ds.map(d => TE_DEFECTS[d].n).join('、')}${m.gain ? `（+${m.gain} 分）` : ''}</b>${m.ds.map(d => TE_DEFECTS[d].ex).join('<br>')}</div>`;
+      else if (m && !m.ok) diag = `<div class="fb no"><b>不是「${DEF[m.part].name}」</b>${m.hint ? `提示：${m.hint}` : ''}</div>`;
+      if (known.length && known.length === causes.length) diag += `${m && m.ok ? '' : `<div class="fb ok"><b>原因已找到</b>${known.map(d => TE_DEFECTS[d].n).join('、')}</div>`}<button class="btn primary" id="tFix" data-d="${known.join(',')}">更換零件，準備重測</button>`;
+      else diag += `<button class="btn primary ${tst.diag === it.id ? 'armed' : ''}" id="tDiag">${tst.diag === it.id ? '在 3D 模型上點出原因零件…（再按一次取消）' : '找出故障零件'}</button>`;
+    }
+  }
+  return `<div class="ih"><span class="pill" style="background:${C.c}">${it.cat} · ${C.n}</span><button class="x" id="infoClose" aria-label="關閉">×</button></div>
+    <div><h2>${it.en}</h2><p class="en">${it.id} · ${it.zh}</p></div>
+    <dl class="specs"><dt>測試條件</dt><dd>${it.cond}</dd><dt>判定（參考）</dt><dd>${it.lim}</dd><dt>儀器</dt><dd>${C.eq}</dd>
+      <dt>量測點</dt><dd>${it.pr.map(k => TE_PROBES[k][0]).join('、')}</dd><dt>相關零件</dt><dd>${it.parts.map(p => DEF[p].name).join('、')}</dd></dl>
+    <div class="tipbox"><b>量測要點</b>${it.tip || C.tip}</div>
+    <button class="btn ${r ? '' : 'primary'}" id="tRun" ${running || tst.run ? 'disabled' : ''}>${r ? '↻ 重新量測' : '▶ 執行測試'}</button>
+    ${res}${diag}
+    <div class="inav"><button id="tPrev">◀ 上一項</button><span class="mono">${i + 1} / ${TE.items.length}</span><button id="tNext">下一項 ▶</button></div>`;
+}
+function teCsv() {
+  const S = teS(), q = v => `"${String(v).replace(/"/g, '""')}"`;
+  const rows = [['ID', 'Test Item', '測項', 'Condition', 'Limit', 'Measured', 'Result']];
+  for (const it of TE.items) { const r = S.res[it.id]; rows.push([it.id, it.en, it.zh, it.cond, it.lim, r ? r.s : '', r ? (r.pass ? 'PASS' : 'FAIL') : 'NOT RUN']); }
+  return '﻿' + rows.map(r => r.map(q).join(',')).join('\r\n');
+}
+function testReportHTML() {
+  const S = teS(), smp = teSample();
+  const cats = Object.keys(TE_CATS).map(c => { const ci = TE.items.filter(it => it.cat === c), dn = ci.filter(it => S.res[it.id]), f = dn.filter(it => !S.res[it.id].pass); return `<tr><td class="mono">${c}</td><td>${TE_CATS[c].n}</td><td class="mono">${dn.length} / ${ci.length}</td><td class="mono ${f.length ? 'badc' : dn.length === ci.length ? 'good' : ''}">${f.length ? f.length + ' FAIL' : dn.length === ci.length ? 'PASS' : '–'}</td></tr>`; }).join('');
+  const fails = TE.items.filter(it => S.res[it.id] && !S.res[it.id].pass);
+  const ans = S.revealed ? `<div class="fb no"><b>答案：這台的問題</b>${S.d.map(d => `${S.found.includes(d) ? '✓' : '✗'} ${TE_DEFECTS[d].n}（${DEF[TE_DEFECTS[d].parts[0]].name}）`).join('<br>')}</div>` : '';
+  return `<div class="ih"><span class="pill" style="background:#5aa9ff">測試報告</span><button class="x" id="infoClose" aria-label="關閉">×</button></div>
+    <div><h2>${smp.n}</h2><p class="en">4.4 kW / 52 V PSU · DVT test report</p></div>
+    ${ans}
+    <table class="rtable"><thead><tr><th>類別</th><th></th><th>已測</th><th>結果</th></tr></thead><tbody>${cats}</tbody></table>
+    ${fails.length ? `<div><p class="chain-t">FAIL 清單</p><table class="rtable"><tbody>${fails.map(it => `<tr><td class="mono"><button class="linkb" data-test="${it.id}">${it.id}</button></td><td>${it.en}</td><td class="mono badc">${S.res[it.id].s}</td></tr>`).join('')}</tbody></table></div>` : ''}
+    <div class="scn"><button class="btn primary" id="tDl">下載 CSV</button><button class="btn" id="tCopy">複製 CSV</button></div>
+    <p class="note">CSV 包含 ID、Test Item、測項、條件、判定、量測值與結果，可以直接貼到 Excel。</p>`;
+}
+function renderTestInfo() {
+  if (mode !== 'test') return;
+  if (tst.view === 'report') info.innerHTML = testReportHTML();
+  else if (tst.sel) info.innerHTML = testInfoHTML();
+  else { info.hidden = true; return; }
+  info.hidden = false;
+}
+info.addEventListener('click', e => {
+  if (mode !== 'test') return;
+  const tb = e.target.closest('[data-test]'); if (tb) { teSelect(tb.dataset.test); return; }
+  const b = e.target.closest('button'); if (!b) return;
+  switch (b.id) {
+    case 'tRun': if (!tst.run) teStartRun(tst.sel, false); break;
+    case 'tDiag': tst.diag = tst.diag ? null : tst.sel; tst.msg = null; renderTestInfo(); if (tst.diag) toast('在 3D 模型上點出最可能造成這個 FAIL 的零件'); break;
+    case 'tFix': teFix(b.dataset.d.split(',')); break;
+    case 'tPrev': case 'tNext': { const i = TE.items.findIndex(it => it.id === tst.sel), d = b.id === 'tNext' ? 1 : -1; teSelect(TE.items[(i + d + TE.items.length) % TE.items.length].id); break; }
+    case 'tDl': {
+      const filename = `PSU-4K4-52V_${tst.cur}_report.csv`;
+      if (teDownloads) teDownloads.save({ filename, data: teCsv() }).then(() => toast('報告已下載'), err => toast(err && err.code === 'declined' ? '已取消下載' : '這裡不能下載，請改用「複製 CSV」'));
+      else if (window.claude) toast('這裡不能下載，請改用「複製 CSV」');
+      else try { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([teCsv()], { type: 'text/csv' })); a.download = filename; document.body.appendChild(a); a.click(); a.remove(); } catch (err) { toast('這個環境不能下載，請改用「複製 CSV」'); }
+      break;
+    }
+    case 'tCopy': { const txt = teCsv(); (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(() => toast('已複製，可以貼到 Excel'), () => toast('瀏覽器不允許複製，請改用下載')); break; }
+  }
+});
+
+/* ---------- TE bench: instrument screen ---------- */
+const TE_FONT = '600 10.5px "JetBrains Mono", monospace';
+function drawTest(g, w, h) {
+  g.font = TE_FONT;
+  const it = TE && tst.sel && TE.byId[tst.sel];
+  let r = null, prog = 1;
+  if (it && tst.run && tst.run.id === it.id && tst.run.k === tst.cur) { r = tst.run.r; prog = clamp((performance.now() - tst.run.t0) / tst.run.dur, 0, 1); }
+  else if (it) r = teS().res[it.id];
+  if (!r) { g.fillStyle = 'rgba(200,215,230,.5)'; g.textAlign = 'center'; g.fillText(it ? '按測項卡片上的「▶ 執行測試」開始量測' : '從清單選一個測項', w / 2, h / 2); g.textAlign = 'left'; return; }
+  const P = r.plot;
+  ({ lanes: tePlotLanes, bars: tePlotBars, curve: tePlotCurve, spec: tePlotSpec, meter: tePlotMeter, text: tePlotText })[P.k](g, w, h, P, prog);
+}
+function tePlotLanes(g, w, h, P, prog) {
+  const L = P.lanes.length, pad = 5, N = Math.max(240, Math.round(w * 1.5)), n = Math.round(N * prog);
+  P.lanes.forEach((ln, i) => {
+    const a = i * h / L, b = (i + 1) * h / L;
+    const Y = v => a + pad + (1 - (clamp(v, ln.lo, ln.hi) - ln.lo) / (ln.hi - ln.lo)) * (b - a - 2 * pad);
+    if (i) { g.strokeStyle = 'rgba(120,150,170,.32)'; g.beginPath(); g.moveTo(0, a + 0.5); g.lineTo(w, a + 0.5); g.stroke(); }
+    g.setLineDash([5, 4]); g.lineWidth = 1;
+    for (const [v, txt, c] of ln.lines || []) { g.strokeStyle = c; g.beginPath(); g.moveTo(0, Y(v)); g.lineTo(w, Y(v)); g.stroke(); if (txt) { g.fillStyle = c; g.textAlign = 'right'; g.fillText(txt, w - 6, Y(v) - 3); g.textAlign = 'left'; } }
+    g.setLineDash([]);
+    g.strokeStyle = ln.c; g.lineWidth = 1.6; g.shadowColor = ln.c; g.shadowBlur = 5; g.beginPath();
+    for (let k = 0; k <= n; k++) { const x = k / N, px = x * w, py = Y(ln.f(x)); k ? g.lineTo(px, py) : g.moveTo(px, py); }
+    g.stroke(); g.shadowBlur = 0;
+    g.fillStyle = 'rgba(200,215,230,.8)'; g.fillText(ln.n, 6, a + 13);
+  });
+  g.setLineDash([3, 3]);
+  (P.marks || []).forEach(([x, txt, c], k) => {
+    if (x > prog) return;
+    g.strokeStyle = c; g.beginPath(); g.moveTo(Math.round(x * w) + 0.5, 0); g.lineTo(Math.round(x * w) + 0.5, h); g.stroke();
+    const tw = g.measureText(txt).width; g.fillStyle = 'rgba(6,10,14,.8)';
+    const tx = Math.min(x * w + 4, w - tw - 4), ty = h - 6 - (k % 3) * 13;
+    g.fillRect(tx - 2, ty - 10, tw + 4, 13); g.fillStyle = c; g.fillText(txt, tx, ty);
+  });
+  g.setLineDash([]);
+}
+function tePlotMeter(g, w, h, P, prog) {
+  const x0 = 34, x1 = w - 34, yc = h * 0.58, X = v => x0 + (clamp(v, P.min, P.max) - P.min) / (P.max - P.min) * (x1 - x0);
+  const lo = P.lo ?? P.min, hi = P.hi ?? P.max;
+  g.fillStyle = 'rgba(255,77,94,.2)'; g.fillRect(x0, yc - 9, x1 - x0, 18);
+  g.fillStyle = 'rgba(61,220,132,.25)'; g.fillRect(X(lo), yc - 9, X(hi) - X(lo), 18);
+  g.fillStyle = 'rgba(200,215,230,.6)'; g.textAlign = 'center';
+  for (let i = 0; i <= 5; i++) { const v = P.min + (P.max - P.min) * i / 5, x = X(v); g.fillRect(x, yc + 10, 1, 5); g.fillText(fx(v, P.dec > 2 ? 2 : P.dec), x, yc + 27); }
+  g.fillStyle = '#ff9aa5';
+  if (P.lo != null) g.fillText(`下限 ${fx(P.lo, P.dec)}`, X(P.lo), yc - 15);
+  if (P.hi != null) g.fillText(`上限 ${fx(P.hi, P.dec)}`, X(P.hi), yc - 15);
+  const e = 1 - Math.pow(1 - prog, 3), v = P.min + (P.v - P.min) * e, ok = P.v >= lo && P.v <= hi, px = X(v);
+  const col = prog < 1 ? '#ffb547' : ok ? '#3ddc84' : '#ff4d5e';
+  g.fillStyle = col; g.beginPath(); g.moveTo(px, yc + 9); g.lineTo(px - 7, yc - 13); g.lineTo(px + 7, yc - 13); g.closePath(); g.fill();
+  g.font = '700 20px "JetBrains Mono", monospace'; g.fillText(`${fx(v, P.dec)} ${P.unit}`, w / 2, 30); g.font = TE_FONT; g.textAlign = 'left';
+}
+function tePlotBars(g, w, h, P, prog) {
+  const n = P.rows.length, L = Math.min(150, w * 0.3), R = 96, row = (h - 12) / n, bh = Math.min(16, row * 0.6), full = w - L - R;
+  P.rows.forEach(([lab, v, lim, unit], i) => {
+    const y = 6 + i * row + (row - bh) / 2, s = full * 0.78 / lim, ok = v <= lim;
+    g.fillStyle = 'rgba(120,150,170,.12)'; g.fillRect(L, y, full, bh);
+    g.fillStyle = prog < 1 ? '#ffb547' : ok ? 'rgba(61,220,132,.85)' : 'rgba(255,77,94,.9)';
+    g.fillRect(L, y, Math.min(full, v * s) * (1 - Math.pow(1 - prog, 3)), bh);
+    g.fillStyle = '#ff4d5e'; g.fillRect(L + lim * s, y - 3, 2, bh + 6);
+    g.fillStyle = 'rgba(200,215,230,.85)'; g.fillText(lab, 6, y + bh - 4);
+    g.fillStyle = ok ? 'rgba(200,215,230,.85)' : '#ff8a96'; g.fillText(`${fx(v, 1)} / ${lim} ${unit}`, L + full + 8, y + bh - 4);
+  });
+}
+function tePlotCurve(g, w, h, P, prog) {
+  const L = 52, R = 12, T = 10, B = 24, X = v => L + (v - P.xr[0]) / (P.xr[1] - P.xr[0]) * (w - L - R), Y = v => T + (1 - (v - P.yr[0]) / (P.yr[1] - P.yr[0])) * (h - T - B);
+  g.strokeStyle = 'rgba(200,215,230,.35)'; g.beginPath(); g.moveTo(L, T); g.lineTo(L, h - B); g.lineTo(w - R, h - B); g.stroke();
+  g.fillStyle = 'rgba(200,215,230,.6)';
+  for (let i = 0; i <= 4; i++) { const v = P.yr[0] + (P.yr[1] - P.yr[0]) * i / 4; g.textAlign = 'right'; g.fillText(fx(v, P.yr[1] > 1000 ? 0 : 1), L - 5, Y(v) + 4); }
+  g.textAlign = 'center'; for (const x of P.xs) g.fillText(x, X(x), h - B + 14); g.textAlign = 'left';
+  g.fillText(P.yl, L + 6, T + 10); g.textAlign = 'right'; g.fillText(P.xl, w - R, h - B - 6); g.textAlign = 'left';
+  g.setLineDash([5, 4]); g.strokeStyle = RED; g.lineWidth = 1.3; g.beginPath();
+  P.ref.forEach(([x, y], i) => { if (P.refStep) { g.moveTo(Math.max(L, X(x) - 12), Y(y)); g.lineTo(Math.min(w - R, X(x) + 12), Y(y)); } else i ? g.lineTo(X(x), Y(y)) : g.moveTo(X(x), Y(y)); });
+  g.stroke(); g.setLineDash([]);
+  g.fillStyle = RED; g.fillText(`--- ${P.refName}`, w - R - 90, T + 10);
+  const n = Math.max(1, Math.ceil(prog * P.xs.length));
+  g.strokeStyle = '#5ad1ff'; g.lineWidth = 1.8; g.beginPath();
+  for (let i = 0; i < n; i++) i ? g.lineTo(X(P.xs[i]), Y(P.ys[i])) : g.moveTo(X(P.xs[i]), Y(P.ys[i]));
+  g.stroke();
+  for (let i = 0; i < n; i++) { g.fillStyle = P.fail(i) ? '#ff4d5e' : '#5ad1ff'; g.beginPath(); g.arc(X(P.xs[i]), Y(P.ys[i]), 3.5, 0, TAU); g.fill(); }
+}
+function tePlotSpec(g, w, h, P, prog) {
+  const ce = P.band === 'CE', f0 = ce ? 0.15 : 30, f1 = ce ? 30 : 1000, yr = ce ? [20, 90] : [0, 60];
+  const lim = f => ce ? (f < 0.5 ? 79 : 73) : (f < 230 ? 40 : 47);
+  const L = 40, R = 10, T = 8, B = 22, lf = Math.log10(f1 / f0);
+  const X = f => L + Math.log10(f / f0) / lf * (w - L - R), Y = v => T + (1 - (clamp(v, yr[0], yr[1]) - yr[0]) / (yr[1] - yr[0])) * (h - T - B);
+  const N = 520, fs = [], raw = [];
+  for (let i = 0; i <= N; i++) {
+    const f = f0 * Math.pow(f1 / f0, i / N); fs.push(f);
+    raw.push(ce ? 58 - 16 * Math.log10(f / 0.15) + 9 * Math.pow(Math.abs(Math.cos(Math.PI * f / 0.07)), 30) + 3 * nz(f * 7) + P.boost * Math.exp(-f / 1.5)
+               : 30 - 5 * Math.log10(f / 30) + [48, 96, 144, 250, 400].reduce((s, c) => s + 12 * Math.exp(-Math.pow((f - c) / (c * 0.012), 2)), 0) + 3 * nz(f * 0.3));
+  }
+  let worst = -1e9, wi = 0; raw.forEach((v, i) => { const d = v - lim(fs[i]); if (d > worst) { worst = d; wi = i; } });
+  const sh = -(worst + P.margin), lv = raw.map(v => v + sh);
+  g.strokeStyle = 'rgba(200,215,230,.35)'; g.beginPath(); g.moveTo(L, T); g.lineTo(L, h - B); g.lineTo(w - R, h - B); g.stroke();
+  g.fillStyle = 'rgba(200,215,230,.6)'; g.textAlign = 'center';
+  for (const f of ce ? [0.15, 0.5, 1, 5, 10, 30] : [30, 100, 230, 500, 1000]) g.fillText(f < 1 ? `${f * 1000}k` : f >= 1000 ? '1G' : `${f}M`, X(f), h - B + 14);
+  g.textAlign = 'right'; for (let v = yr[0]; v <= yr[1]; v += 20) g.fillText(v, L - 5, Y(v) + 4); g.textAlign = 'left';
+  g.strokeStyle = RED; g.lineWidth = 1.5; g.beginPath(); fs.forEach((f, i) => i ? g.lineTo(X(f), Y(lim(f))) : g.moveTo(X(f), Y(lim(f)))); g.stroke();
+  g.fillStyle = RED; g.fillText('Class A QP 限值', w - R - 110, Y(lim(f1)) - 5);
+  const n = Math.round(N * prog);
+  g.strokeStyle = '#ffd166'; g.lineWidth = 1.1; g.beginPath(); for (let i = 0; i <= n; i++) i ? g.lineTo(X(fs[i]), Y(lv[i])) : g.moveTo(X(fs[i]), Y(lv[i])); g.stroke();
+  if (prog >= 1) { const x = X(fs[wi]), y = Y(lv[wi]); g.fillStyle = P.margin >= 3 ? '#3ddc84' : '#ff4d5e'; g.beginPath(); g.arc(x, y, 4, 0, TAU); g.fill(); g.fillText(P.margin >= 0 ? `餘裕 ${fx(P.margin)} dB` : `超標 ${fx(-P.margin)} dB`, Math.min(x + 8, w - 110), y - 6); }
+}
+function tePlotText(g, w, h, P, prog) {
+  const n = Math.ceil(prog * P.rows.length), lh = Math.min(24, (h - 12) / P.rows.length);
+  g.font = '500 12.5px "Noto Sans TC", sans-serif';
+  P.rows.slice(0, n).forEach(([t, ok], i) => {
+    const y = 10 + i * lh + lh * 0.7;
+    g.fillStyle = prog < 1 && i === n - 1 ? '#ffb547' : ok ? '#3ddc84' : '#ff4d5e';
+    g.fillText(prog < 1 && i === n - 1 ? '…' : ok ? '✓' : '✗', 12, y);
+    g.fillStyle = ok ? 'rgba(220,230,240,.9)' : '#ff9aa5'; g.fillText(t, 32, y);
+  });
+  g.font = TE_FONT;
+}
+
 /* ---------- selection ---------- */
 function compBox(ids) { const b = new THREE.Box3(); ids.forEach(id => comps[id] && b.expandByObject(comps[id].group)); return b; }
 let camTween = null;
@@ -2760,11 +3624,13 @@ document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => setMode
 function setMode(m) {
   mode = m;
   document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
-  const scopeOn = m === 'flow' || m === 'ats' || m === 'fw';
+  const scopeOn = m === 'flow' || m === 'ats' || m === 'fw' || m === 'test';
   $('#scope').hidden = !scopeOn; document.body.classList.toggle('has-scope', scopeOn);
   flowGroup.visible = m === 'flow' || m === 'ats';
   if (fwGroup) fwGroup.visible = m === 'fw';
   fwLabels.forEach(l => l.visible = m === 'fw');
+  if (teGroup) teGroup.visible = m === 'test';
+  teShowProbes([]);
   selIds = new Set(); currentId = null; info.hidden = true; hoverId = null; tip.hidden = true;
   if (m !== 'explore') setCover(true);
   for (const k in feedLabels) feedLabels[k].lo.visible = m === 'ats';
@@ -2782,6 +3648,12 @@ function setMode(m) {
     flyTo(new THREE.Vector3(...v.pos).sub(HOME_T).multiplyScalar(camera.aspect < 1 ? 1.6 : 1).add(HOME_T), new THREE.Vector3(...v.target));
   }
   else if (m === 'quiz') { startQuiz(); flyTo(homePos(), HOME_T); }
+  else if (m === 'test') {
+    teInit(); explodeT = 0; setPressed('#tExplode', false);
+    tst.view = 'item';
+    teSelect(tst.sel || (teList()[0] || TE.items[0]).id, false);
+    flyTo(homePos(), HOME_T);
+  }
   else renderPanel();
   applyLabels(); updateScopeHead();
 }
@@ -2797,7 +3669,8 @@ function loadModel(key, { fromIntro = false } = {}) {
   $('#tZones').textContent = M.zoneBtn;
   try { if (location.hash !== '#' + M.key) history.replaceState(null, '', '#' + M.key); } catch (e) {}
   resetSim();
-  setMode(fromIntro ? 'explore' : mode);
+  $('#testTab').hidden = !M.tests;
+  setMode(fromIntro || (mode === 'test' && !M.tests) ? 'explore' : mode);
 }
 $('#modelSel').onchange = e => { loadModel(e.target.value); toast(`已切換到 ${$('#modelSel').selectedOptions[0].textContent}`); };
 window.addEventListener('hashchange', () => { const k = location.hash.slice(1); if (MODELS[k] && k !== M.key) loadModel(k); });
@@ -2830,6 +3703,13 @@ function updateScopeHead() {
     $('#scopeDiv').textContent = w.tdiv;
     $('#scopeLegend').innerHTML = w.ch.map(c => `<span><i style="background:${c.c}"></i>${c.n}${c.v ? ` · ${c.v}` : ''}</span>`).join('');
     $('#scopeNote').textContent = w.note;
+  } else if (mode === 'test') {
+    const it = TE && tst.sel && TE.byId[tst.sel];
+    const r = it && (tst.run && tst.run.id === it.id && tst.run.k === tst.cur ? tst.run.r : teS().res[it.id]);
+    $('#scopeTitle').textContent = it ? `${it.id} · ${it.en}` : '量測儀器';
+    $('#scopeDiv').textContent = r ? (r.plot.tdiv || { meter: '量測值 / 判定範圍', text: '檢查項目', curve: '', spec: '', bars: '' }[r.plot.k] || '') : '';
+    $('#scopeLegend').innerHTML = r && r.plot.k === 'lanes' ? r.plot.lanes.map(l => `<span><i style="background:${l.c}"></i>${l.n}</span>`).join('') : '';
+    $('#scopeNote').textContent = it ? `儀器：${TE_CATS[it.cat].eq}` : '';
   } else if (mode === 'fw' && fw.bus === 'pmbus') {
     $('#scopeTitle').textContent = 'PMBus (SMBus / I²C) · 最新交易';
     $('#scopeDiv').textContent = `SCL ${fw.khz >= 1000 ? '1 MHz' : fw.khz + ' kHz'} · 每位元 ${(1000 / fw.khz).toFixed(fw.khz >= 1000 ? 1 : 1)} µs`;
@@ -2852,7 +3732,7 @@ function drawScope() {
   g.strokeStyle = 'rgba(120,150,170,.13)'; g.lineWidth = 1;
   for (let i = 1; i < 10; i++) { const x = Math.round(i * w / 10) + 0.5; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
   for (let j = 1; j < 8; j++) { const y = Math.round(j * h / 8) + 0.5; g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
-  if (mode === 'ats') drawStrip(g, w, h); else if (mode === 'fw') drawCan(g, w, h); else drawWave(g, w, h);
+  if (mode === 'ats') drawStrip(g, w, h); else if (mode === 'fw') drawCan(g, w, h); else if (mode === 'test') drawTest(g, w, h); else drawWave(g, w, h);
 }
 function drawWave(g, w, h) {
   const W = M.waves[STAGES[flowStage].wave], p = time * 1.3;
@@ -2915,6 +3795,7 @@ renderer.domElement.addEventListener('pointerup', e => {
   if (moved > 6) return;
   const id = pick(e);
   if (mode === 'quiz') { if (id) answerQuiz(id); return; }
+  if (mode === 'test') { if (id) teClickPart(id); return; }
   if (id) selectComp(id);
   else if (mode === 'explore' && !info.hidden) closeInfo();
   else if (!info.hidden) info.hidden = true;
@@ -3069,7 +3950,7 @@ let declutterTick = 0;
 function declutter() {
   const host = labelRenderer.domElement;
   const box = r => ({ x: r.left, w: r.width, top: r.top, h: r.height });
-  const placed = [...host.querySelectorAll('.lbl,.zlbl,.flbl')].filter(e => e.style.display !== 'none' && e.isConnected).map(e => box(e.getBoundingClientRect()));
+  const placed = [...host.querySelectorAll('.lbl,.zlbl,.flbl,.plbl')].filter(e => e.style.display !== 'none' && e.isConnected).map(e => box(e.getBoundingClientRect()));
   const panels = ['#panel', '#info', '#scope', '#topbar .tabs', '#topbar .tools', '#topbar .brand', '#topbar .msel', '#toast']
     .map(s => $(s)).filter(e => e && !e.hidden && e.offsetParent !== null).map(e => box(e.getBoundingClientRect()));
   const over = (a, top, list, pad) => list.some(p => a.x < p.x + p.w + pad && p.x < a.x + a.w + pad && top < p.top + p.h + 2 && p.top < top + a.h + 2);
@@ -3120,6 +4001,7 @@ function loop(now) {
   M.leds(sim, mode === 'ats');
   fwTick(dt);
   if (mode === 'fw') { updateFwScene(dt); updateFwUI(false); }
+  if (mode === 'test') teTick(now);
   applyLabels();
   updateHighlights();
   if (flowGroup.visible) updateParticles(dt);
