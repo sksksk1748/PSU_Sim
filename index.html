@@ -2629,7 +2629,8 @@ panelBody.addEventListener('click', e => {
       case 'tRunCat': teRunCat(); renderPanel(); break;
       case 'tReport': tst.view = 'report'; renderTestInfo(); break;
       case 'tFixAll': teFixOverview(); break;
-      case 'tResetS': if (!tst.run && !tst.queue.length) { delete tst.S[tst.cur]; tst.msg = null; tst.diag = null; teSave(); renderPanel(); renderTestInfo(); updateScopeHead(); toast(tst.cur === 'blind' ? '換了一台新的盲測樣品' : '這台樣品的測試紀錄已清除'); } break;
+      case 'tResetS': if (!tst.run && !tst.queue.length) { delete tst.S[tst.cur]; tst.msg = null; tst.diag = null; teSave(); renderPanel(); renderTestInfo(); updateScopeHead(); toast(teSample().d ? '這台樣品的測試紀錄已清除' : '換了一台新的樣品，問題重新隨機'); } break;
+      case 'tSubmit': teSubmit(); break;
       case 'tReveal': { const S = teS(); S.revealed = true; teSave(); tst.view = 'report'; renderTestInfo(); renderPanel(); break; }
     }
     return;
@@ -2857,6 +2858,8 @@ const TE_SAMPLES = [
   { k: 's5', n: '#088 · DVT 樣品', d: ['ntc', 'oring', 'xfmr', 'llc'] },
   { k: 's6', n: '#093 · 治具除錯', d: ['fxgnd', 'fxsense'], desc: '這台 DUT 其實是良品，但有 <b>2</b> 個問題出在治具或量測接法，量出了假的 FAIL。找出是哪個治具元件（在治具板上點），接好後重測。' },
   { k: 'blind', n: '盲測樣品（隨機 2–3 個問題）', d: null },
+  { k: 'chal', n: '時程挑戰（24 h 預算 · 3 個問題）', d: null, chal: true, budget: 24,
+    desc: 'DVT 時程很緊：你只有 <b>24 小時</b>的測試時間，這台藏了 <b>3</b> 個隨機問題。每個測項旁邊標了要花的時數（EMC 要排實驗室、燒機要 72 h）。挑時數少又最可能抓到問題的測項，找完按「提交報告」結算。' },
 ];
 
 /* ---------- test fixture board (load board behind the PSU's output end) ---------- */
@@ -3514,8 +3517,23 @@ function teRand(seed, key) { return (teHash(key, seed) % 20001) / 10000 - 1; }
 function teSample(k = tst.cur) { return TE_SAMPLES.find(s => s.k === k); }
 function teNewS(k) {
   const smp = teSample(k);
-  const d = smp.d ? smp.d.slice() : Object.keys(TE_DEFECTS).filter(k => !TE_DEFECTS[k].fixture).sort(() => Math.random() - 0.5).slice(0, Math.random() < 0.5 ? 2 : 3);
-  return { d, seed: k === 'blind' ? (Math.random() * 4e9) >>> 0 : teHash(k), res: {}, found: [], fixed: [], score: 0, tries: {}, revealed: false, bonus: false };
+  const d = smp.d ? smp.d.slice() : Object.keys(TE_DEFECTS).filter(k => !TE_DEFECTS[k].fixture).sort(() => Math.random() - 0.5).slice(0, smp.chal ? 3 : Math.random() < 0.5 ? 2 : 3);
+  return { d, seed: smp.d ? teHash(k) : (Math.random() * 4e9) >>> 0, res: {}, found: [], fixed: [], score: 0, tries: {}, revealed: false, bonus: false, used: 0, submitted: false };
+}
+/* bench hours per item: lab bookings, chamber soaks and burn-in are what really eat a DVT schedule */
+const TE_HOURS_CAT = { IN: 1, ATS: 1, EFF: 1, OUT: 1, PRT: 1, THM: 4, COM: 0.5, SAF: 0.5, EMC: 6, SYS: 2 };
+const TE_HOURS = {
+  'IN-01': 2, 'IN-03': 0.5, 'IN-04': 0.5, 'IN-05': 0.5, 'IN-06': 2, 'IN-09': 0.5, 'IN-10': 0.5,
+  'ATS-03': 2, 'ATS-10': 1.5, 'ATS-11': 30, 'EFF-01': 3, 'EFF-02': 0.5, 'EFF-03': 1.5, 'EFF-04': 6,
+  'OUT-04': 1.5, 'OUT-05': 2, 'OUT-06': 0.5, 'OUT-07': 0.5, 'OUT-08': 0.5, 'OUT-10': 0.5, 'OUT-11': 3, 'OUT-12': 1.5, 'OUT-14': 0.5, 'OUT-16': 8,
+  'PRT-05': 4, 'THM-01': 8, 'THM-02': 8, 'THM-04': 6, 'THM-05': 2, 'THM-06': 72, 'THM-07': 24,
+  'COM-01': 3, 'COM-02': 2, 'COM-07': 1, 'COM-08': 1, 'COM-09': 2, 'SAF-06': 8, 'SAF-07': 8, 'SAF-08': 2, 'EMC-01': 4,
+};
+const teHours = id => TE_HOURS[id] ?? TE_HOURS_CAT[id.split('-')[0]];
+const fh = h => (h % 1 ? h.toFixed(1) : String(h));
+// the cheapest items that catch a defect on its own: the answer key for "which test should I have run?"
+function teBestTests(d, S = teS(), n = 2) {
+  return TE.items.filter(it => !teMeasure(it, new Set([d]), S).pass).sort((a, b) => teHours(a.id) - teHours(b.id)).slice(0, n);
 }
 function teS(k = tst.cur) { return tst.S[k] || (tst.S[k] = teNewS(k)); }
 function teActive(S = teS()) { return new Set(S.d.filter(x => !S.fixed.includes(x))); }
@@ -3525,7 +3543,7 @@ function teCauses(id, S = teS()) { const it = TE.byId[id]; return [...teActive(S
 function teSave() {
   try {
     const o = {};
-    for (const k in tst.S) { const S = tst.S[k]; o[k] = { d: S.d, seed: S.seed, ids: Object.keys(S.res), found: S.found, fixed: S.fixed, score: S.score, tries: S.tries, revealed: S.revealed, bonus: S.bonus }; }
+    for (const k in tst.S) { const S = tst.S[k]; o[k] = { d: S.d, seed: S.seed, ids: Object.keys(S.res), found: S.found, fixed: S.fixed, score: S.score, tries: S.tries, revealed: S.revealed, bonus: S.bonus, used: S.used, submitted: S.submitted, final: S.final || null }; }
     localStorage.setItem(TE_STORE, JSON.stringify({ cur: tst.cur, S: o }));
   } catch (e) {}
 }
@@ -3535,7 +3553,7 @@ function teLoad() {
     for (const k in o.S) {
       const smp = teSample(k), s = o.S[k]; if (!smp) continue;
       const d = smp.d ? smp.d.slice() : (s.d || []).filter(x => TE_DEFECTS[x]);
-      const S = { d, seed: smp.d ? teHash(k) : (s.seed >>> 0), res: {}, found: (s.found || []).filter(x => d.includes(x)), fixed: (s.fixed || []).filter(x => d.includes(x)), score: +s.score || 0, tries: s.tries || {}, revealed: !!s.revealed, bonus: !!s.bonus };
+      const S = { d, seed: smp.d ? teHash(k) : (s.seed >>> 0), res: {}, found: (s.found || []).filter(x => d.includes(x)), fixed: (s.fixed || []).filter(x => d.includes(x)), score: +s.score || 0, tries: s.tries || {}, revealed: !!s.revealed, bonus: !!s.bonus, used: +s.used || 0, submitted: !!s.submitted, final: s.final || null };
       tst.S[k] = S;
       const D = teActive(S);
       for (const id of s.ids || []) { const it = TE.byId[id]; if (it) S.res[id] = teMeasure(it, D, S); }
@@ -3550,23 +3568,48 @@ function teInit() {
 }
 
 /* ---------- TE bench: running, diagnosis, repair ---------- */
+// returns false when the time-budget challenge has no hours left for this item
 function teStartRun(id, quick) {
-  const S = teS();
+  const S = teS(), smp = teSample();
+  if (smp.chal) {
+    if (S.submitted) { toast('報告已經提交，按「重新開始這台」換一台新的挑戰樣品'); return false; }
+    const h = teHours(id), left = smp.budget - S.used;
+    if (h > left + 1e-9) { toast(`時數不夠：${id} 要 ${fh(h)} h，只剩 ${fh(left)} h`); return false; }
+    S.used += h;
+  }
   tst.run = { id, k: tst.cur, quick, t0: performance.now(), dur: quick ? 220 : 1100 + Math.random() * 400, r: teMeasure(TE.byId[id], teActive(S), S) };
   if (id === tst.sel) { tst.msg = null; tst.diag = null; renderTestInfo(); updateScopeHead(); }
+  return true;
 }
 function teRunCat() {
   if (tst.run || tst.queue.length) return;
   const ids = teList().map(it => it.id).filter(id => !teS().res[id]);
   if (!ids.length) { toast('這一組都量過了；要重量單一測項，請在右邊按「重新量測」'); return; }
-  tst.queue = ids; teStartRun(tst.queue.shift(), true);
+  const smp = teSample();
+  if (smp.chal) { const need = ids.reduce((s, id) => s + teHours(id), 0), left = smp.budget - teS().used; if (need > left) { toast(`這一組全部要 ${fh(need)} h，只剩 ${fh(left)} h。挑時數少、最可能抓到問題的測項一項一項量`, 4500); return; } }
+  tst.queue = ids;
+  if (!teStartRun(tst.queue.shift(), true)) tst.queue = [];
+}
+function teSubmit() {
+  const S = teS(), smp = teSample();
+  if (!smp.chal || S.submitted || tst.run) return;
+  const left = smp.budget - S.used, found = S.d.filter(d => S.found.includes(d)).length;
+  // early submit with problems still hidden: ask once (a second press within 6 s confirms)
+  if (found < S.d.length && left > 0 && !(tst.submitArm > performance.now())) {
+    tst.submitArm = performance.now() + 6000;
+    toast(`只找到 ${found} / ${S.d.length} 個問題，還剩 ${fh(left)} h。確定要提交，請再按一次「提交報告」`, 5000); return;
+  }
+  S.submitted = true; S.revealed = true;
+  S.final = { found, total: S.d.length, diag: S.score, timeBonus: found ? Math.round(left * 2) : 0 };
+  S.score = S.final.diag + S.final.timeBonus;
+  teSave(); tst.view = 'report'; renderTestInfo(); renderPanel();
 }
 function teTick(now) {
   if (!tst.run || now - tst.run.t0 < tst.run.dur) return;
   const r = tst.run; tst.run = null;
   const S = tst.S[r.k];
   if (S) { S.res[r.id] = r.r; teSave(); teCheckDone(S); }
-  if (tst.queue.length && r.k === tst.cur) teStartRun(tst.queue.shift(), true);
+  if (tst.queue.length && r.k === tst.cur && teStartRun(tst.queue.shift(), true)) { /* next item of the group is running */ }
   else if (r.quick) {
     tst.queue = [];
     const list = teList(), fails = list.filter(it => S.res[it.id] && !S.res[it.id].pass).length;
@@ -3576,7 +3619,7 @@ function teTick(now) {
   renderPanel();
 }
 function teCheckDone(S) {
-  if (S.bonus || S.revealed) return;
+  if (S.bonus || S.revealed || S.submitted || S.used) return;
   const all = TE.items.every(it => S.res[it.id] && S.res[it.id].pass), fixed = S.d.every(d => S.fixed.includes(d));
   if (all && fixed) { S.bonus = true; S.score += 50; teSave(); toast(`${teSample().n}：${TE.items.length} 項全部 PASS，可以放行！ +50 分`, 5000); }
 }
@@ -3669,6 +3712,7 @@ function testPanelHTML() {
     <label class="field"><span>DUT 樣品</span><select id="tSample">${TE_SAMPLES.map(s => `<option value="${s.k}" ${s.k === tst.cur ? 'selected' : ''}>${s.n}</option>`).join('')}</select></label>
     <p class="note">${smp.desc || (smp.d ? `這台有 <b>${smp.d.length}</b> 個問題，找出來、換料，讓 ${items.length} 項全部 PASS。` : '問題數量不公開，量完找出全部問題再按「公布答案」對答案。')}</p>
     <div class="prog"><div class="bar"><i style="width:${done.length / items.length * 100}%"></i></div><span class="mono">${done.length} / ${items.length}</span></div>
+    ${smp.chal ? `<div class="prog hrs"><div class="bar"><i style="width:${S.used / smp.budget * 100}%;background:${S.used / smp.budget > 0.8 ? 'var(--bad)' : 'var(--ac)'}"></i></div><span class="mono">已用 ${fh(S.used)} / ${smp.budget} h</span></div>` : ''}
     <dl class="readouts">
       <div><dt>PASS</dt><dd class="good">${done.length - fails.length}</dd></div><div><dt>FAIL</dt><dd class="${fails.length ? 'badc' : ''}">${fails.length}</dd></div>
       <div><dt>找到的問題</dt><dd>${S.found.length} / ${blindHide ? '?' : S.d.length}</dd></div><div><dt>分數</dt><dd class="warn">${S.score}</dd></div>
@@ -3676,9 +3720,9 @@ function testPanelHTML() {
     <button class="btn ${tst.view === 'fixall' ? 'primary' : ''}" id="tFixAll">認識測試台架：AC 電源 + 治具板（${FIX_DEFS.length} 項）</button>
     <div class="chips">${chips}</div>
     ${head}
-    <ul class="tlist">${list.map(it => `<li><button data-test="${it.id}" class="${tst.sel === it.id ? 'on' : ''}"><span class="tid">${it.id}</span><span><b>${it.en}</b><small>${it.zh}</small></span>${teBadge(S, it.id)}</button></li>`).join('')}</ul>
-    <div class="scn"><button class="btn primary" id="tRunCat" ${tst.run || tst.queue.length ? 'disabled' : ''}>量完這一組</button><button class="btn" id="tReport">測試報告</button></div>
-    <div class="scn"><button class="btn" id="tResetS">重新開始這台</button>${smp.d ? '' : `<button class="btn" id="tReveal" ${S.revealed ? 'disabled' : ''}>公布答案</button>`}</div>
+    <ul class="tlist">${list.map(it => `<li><button data-test="${it.id}" class="${tst.sel === it.id ? 'on' : ''}"><span class="tid">${it.id}<small>${fh(teHours(it.id))} h</small></span><span><b>${it.en}</b><small>${it.zh}</small></span>${teBadge(S, it.id)}</button></li>`).join('')}</ul>
+    <div class="scn"><button class="btn primary" id="tRunCat" ${tst.run || tst.queue.length || S.submitted ? 'disabled' : ''}>量完這一組</button><button class="btn" id="tReport">測試報告</button></div>
+    <div class="scn"><button class="btn" id="tResetS">${smp.d ? '重新開始這台' : '換一台新樣品'}</button>${smp.d ? '' : smp.chal ? `<button class="btn primary" id="tSubmit" ${S.submitted ? 'disabled' : ''}>提交報告</button>` : `<button class="btn" id="tReveal" ${S.revealed ? 'disabled' : ''}>公布答案</button>`}</div>
     <p class="note">小技巧：在 3D 模型上點任何零件，會列出和它有關的測項。</p>`;
 }
 function testInfoHTML() {
@@ -3701,9 +3745,10 @@ function testInfoHTML() {
     <div><h2>${it.en}</h2><p class="en">${it.id} · ${it.zh}</p></div>
     <dl class="specs"><dt>測試條件</dt><dd>${it.cond}</dd><dt>判定（參考）</dt><dd>${it.lim}</dd><dt>儀器</dt><dd>${C.eq}</dd>
       <dt>量測點</dt><dd>${it.pr.map(k => TE_PROBES[k][0]).join('、')}</dd><dt>相關零件</dt><dd>${it.parts.map(p => DEF[p].name).join('、')}</dd>
-      ${teFixOf(it.id).length ? `<dt>治具</dt><dd>${teFixOf(it.id).map(f => `<button class="linkb" data-fix="${f}">${FIX[f].name}</button>`).join('、')}</dd>` : ''}</dl>
+      ${teFixOf(it.id).length ? `<dt>治具</dt><dd>${teFixOf(it.id).map(f => `<button class="linkb" data-fix="${f}">${FIX[f].name}</button>`).join('、')}</dd>` : ''}
+      <dt>所需時間</dt><dd>約 ${fh(teHours(it.id))} 小時（含架設與熱穩定）</dd></dl>
     <div class="tipbox"><b>量測要點</b>${it.tip || C.tip}</div>
-    <button class="btn ${r ? '' : 'primary'}" id="tRun" ${running || tst.run ? 'disabled' : ''}>${r ? '↻ 重新量測' : '▶ 執行測試'}</button>
+    <button class="btn ${r ? '' : 'primary'}" id="tRun" ${running || tst.run || S.submitted ? 'disabled' : ''}>${r ? '↻ 重新量測' : '▶ 執行測試'}${teSample().chal ? `（${fh(teHours(it.id))} h）` : ''}</button>
     ${res}${diag}
     <div class="inav"><button id="tPrev">◀ 上一項</button><span class="mono">${i + 1} / ${TE.items.length}</span><button id="tNext">下一項 ▶</button></div>`;
 }
@@ -3717,10 +3762,17 @@ function testReportHTML() {
   const S = teS(), smp = teSample();
   const cats = Object.keys(TE_CATS).map(c => { const ci = TE.items.filter(it => it.cat === c), dn = ci.filter(it => S.res[it.id]), f = dn.filter(it => !S.res[it.id].pass); return `<tr><td class="mono">${c}</td><td>${TE_CATS[c].n}</td><td class="mono">${dn.length} / ${ci.length}</td><td class="mono ${f.length ? 'badc' : dn.length === ci.length ? 'good' : ''}">${f.length ? f.length + ' FAIL' : dn.length === ci.length ? 'PASS' : '–'}</td></tr>`; }).join('');
   const fails = TE.items.filter(it => S.res[it.id] && !S.res[it.id].pass);
-  const ans = S.revealed ? `<div class="fb no"><b>答案：這台的問題</b>${S.d.map(d => `${S.found.includes(d) ? '✓' : '✗'} ${TE_DEFECTS[d].n}（${partName(TE_DEFECTS[d].parts[0])}）`).join('<br>')}</div>` : '';
-  return `<div class="ih"><span class="pill" style="background:#5aa9ff">測試報告</span><button class="x" id="infoClose" aria-label="關閉">×</button></div>
+  // challenge: score, rank, and for every defect the cheapest items that would have caught it
+  const F = smp.chal && S.submitted && S.final;
+  const rank = F ? (F.found === F.total ? (smp.budget - S.used >= 8 ? '資深 TE：又快又準' : '合格 TE：全部抓到') : F.found ? '見習 TE：還有問題漏掉' : '再挑戰一次') : '';
+  const ans = S.revealed ? `<div class="fb ${F && F.found === F.total ? 'ok' : 'no'}"><b>${F ? `結算：找到 ${F.found} / ${F.total} 個問題 · ${rank}` : '答案：這台的問題'}</b>${S.d.map(d => {
+      const best = teBestTests(d, S).map(it => `${it.id}（${fh(teHours(it.id))} h）`).join('、');
+      return `${S.found.includes(d) ? '✓' : '✗'} ${TE_DEFECTS[d].n}（${partName(TE_DEFECTS[d].parts[0])}）${best ? `<br><small>最省時抓到它的測項：${best}</small>` : ''}`;
+    }).join('<br>')}</div>` : '';
+  const score = F ? `<dl class="readouts"><div><dt>用掉時數</dt><dd>${fh(S.used)} / ${smp.budget} h</dd></div><div><dt>診斷得分</dt><dd>${F.diag}</dd></div><div><dt>剩餘時數加分</dt><dd>+${F.timeBonus}</dd></div><div><dt>總分</dt><dd class="warn">${S.score}</dd></div></dl>` : '';
+  return `<div class="ih"><span class="pill" style="background:#5aa9ff">${F ? '時程挑戰結算' : '測試報告'}</span><button class="x" id="infoClose" aria-label="關閉">×</button></div>
     <div><h2>${smp.n}</h2><p class="en">4.4 kW / 52 V PSU · DVT test report</p></div>
-    ${ans}
+    ${score}${ans}
     <table class="rtable"><thead><tr><th>類別</th><th></th><th>已測</th><th>結果</th></tr></thead><tbody>${cats}</tbody></table>
     ${fails.length ? `<div><p class="chain-t">FAIL 清單</p><table class="rtable"><tbody>${fails.map(it => `<tr><td class="mono"><button class="linkb" data-test="${it.id}">${it.id}</button></td><td>${it.en}</td><td class="mono badc">${S.res[it.id].s}</td></tr>`).join('')}</tbody></table></div>` : ''}
     <div class="scn"><button class="btn primary" id="tDl">下載 CSV</button><button class="btn" id="tCopy">複製 CSV</button></div>
